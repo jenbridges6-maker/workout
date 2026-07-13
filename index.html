@@ -76,12 +76,27 @@
 
   .divider{height:1px;background:var(--line);margin:36px 0 8px;}
   .plan-h{font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;font-size:13px;color:var(--muted);margin:22px 0 10px;}
-  .glance{display:flex;flex-direction:column;gap:2px;}
-  .g-row{display:flex;align-items:baseline;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px;}
+  .plan-sub{color:var(--muted);font-size:12.5px;margin:-6px 0 10px;}
+  .glance{display:flex;flex-direction:column;}
+  .g-item{border-bottom:1px solid var(--line);}
+  .g-row{display:flex;align-items:center;gap:12px;width:100%;padding:11px 2px;background:transparent;border:0;color:var(--text);font-family:inherit;font-size:14px;text-align:left;cursor:pointer;}
+  .g-row:focus-visible{outline:3px solid var(--gold);outline-offset:2px;border-radius:8px;}
   .g-day{font-family:'Oswald',sans-serif;letter-spacing:0.1em;text-transform:uppercase;font-size:12px;color:var(--gold);width:42px;flex:0 0 42px;}
-  .g-row.now .g-day{color:var(--coral);}
-  .g-tag{color:var(--text);}
-  .g-row.now .g-tag{font-weight:600;}
+  .g-item.now .g-day{color:var(--coral);}
+  .g-tag{color:var(--text);flex:1;min-width:0;}
+  .g-item.now .g-tag{font-weight:600;}
+  .g-chev{flex:0 0 12px;width:12px;height:12px;color:var(--muted);transition:transform .18s ease;}
+  .g-item.open .g-chev{transform:rotate(90deg);}
+  @media (prefers-reduced-motion:reduce){.g-chev{transition:none;}}
+  .g-detail{display:none;padding:2px 2px 16px 54px;}
+  .g-item.open .g-detail{display:block;}
+  .g-time{font-family:'Oswald',sans-serif;letter-spacing:0.06em;text-transform:uppercase;font-size:11px;color:var(--gold);margin-bottom:5px;}
+  .g-how{color:var(--muted);font-size:13px;margin-bottom:10px;}
+  .p-ex{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);}
+  .p-body{flex:1;min-width:0;}
+  .p-name{font-weight:600;font-size:14.5px;}
+  .p-det{color:var(--muted);font-size:12.5px;margin-top:1px;}
+  .p-flag{color:var(--coral);font-size:11.5px;margin-top:2px;}
 
   .foot{color:var(--muted);font-size:12px;margin-top:26px;line-height:1.6;}
   .foot b{color:var(--gold);}
@@ -104,11 +119,12 @@
 
   <div class="divider"></div>
   <div class="plan-h">This week at a glance</div>
+  <div class="plan-sub">Tap a day to see the whole workout and watch the moves.</div>
   <div class="glance" id="glance"></div>
 
   <div class="foot">
     <b>The floor:</b> if a morning falls apart, do the 5 minute bounce and nothing else. You still showed up.<br />
-    Tap a move to check it off. Tap swap if you can't do one today. Everything resets and regenerates each morning on its own.
+    Tap a move to check it off. Tap swap if you can't do one today. Tap any day in the week list to preview it the night before. Everything resets and regenerates each morning on its own.
   </div>
 </div>
 
@@ -119,19 +135,25 @@
  function seedFromDate(d){return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 
  var MOVES=[
-  {id:"goblet",name:"Goblet squat",pattern:"lower",impact:false,q:"kettlebell goblet squat form"},
-  {id:"revlunge",name:"Reverse lunge",pattern:"lower",impact:false,unil:true,q:"kettlebell reverse lunge form"},
-  {id:"split",name:"Split squat",pattern:"lower",impact:false,unil:true,q:"kettlebell split squat form"},
-  {id:"kbdl",name:"Kettlebell deadlift",pattern:"lower",impact:false,q:"kettlebell deadlift form"},
-  {id:"sldl",name:"Single-leg deadlift",pattern:"lower",impact:false,unil:true,q:"kettlebell single leg deadlift form"},
-  {id:"swing",name:"Kettlebell swing",pattern:"lower",impact:true,q:"kettlebell swing form beginner"},
-  {id:"press",name:"Single-arm press",pattern:"upper",impact:false,unil:true,q:"kettlebell single arm shoulder press form"},
-  {id:"floorpress",name:"Floor press",pattern:"upper",impact:false,unil:true,q:"kettlebell floor press form"},
-  {id:"pushup",name:"Push-up",pattern:"upper",impact:false,q:"push up proper form"},
-  {id:"row",name:"Bent-over row",pattern:"upper",impact:false,unil:true,q:"kettlebell bent over row form"},
-  {id:"highpull",name:"Kettlebell high pull",pattern:"upper",impact:true,q:"kettlebell high pull form"},
-  {id:"halo",name:"Halo",pattern:"upper",impact:false,q:"kettlebell halo form"},
+  {id:"goblet",name:"Goblet squat",pattern:"lower",sub:"squat",impact:false,q:"kettlebell goblet squat form"},
+  {id:"rackedsq",name:"Racked squat",pattern:"lower",sub:"squat",impact:false,unil:true,q:"kettlebell single arm front racked squat form"},
+  {id:"revlunge",name:"Reverse lunge",pattern:"lower",sub:"squat",impact:false,unil:true,q:"kettlebell reverse lunge form"},
+  {id:"split",name:"Split squat",pattern:"lower",sub:"squat",impact:false,unil:true,q:"kettlebell split squat form"},
+  {id:"kbdl",name:"Kettlebell deadlift",pattern:"lower",sub:"hinge",impact:false,q:"kettlebell deadlift form"},
+  {id:"suitdl",name:"Suitcase deadlift",pattern:"lower",sub:"hinge",impact:false,unil:true,q:"kettlebell suitcase deadlift form"},
+  {id:"sldl",name:"Single-leg deadlift",pattern:"lower",sub:"hinge",impact:false,unil:true,q:"kettlebell single leg deadlift form"},
+  {id:"bridge",name:"Glute bridge",pattern:"lower",sub:"hinge",impact:false,q:"kettlebell glute bridge form"},
+  {id:"swing",name:"Kettlebell swing",pattern:"lower",sub:"hinge",impact:true,q:"kettlebell swing form beginner"},
+  {id:"press",name:"Single-arm press",pattern:"upper",sub:"push",impact:false,unil:true,q:"kettlebell single arm shoulder press form"},
+  {id:"floorpress",name:"Floor press",pattern:"upper",sub:"push",impact:false,unil:true,q:"kettlebell floor press form"},
+  {id:"pushup",name:"Push-up",pattern:"upper",sub:"push",impact:false,q:"push up proper form"},
+  {id:"row",name:"Bent-over row",pattern:"upper",sub:"pull",impact:false,unil:true,q:"kettlebell single arm bent over row form"},
+  {id:"kneelrow",name:"Half-kneeling row",pattern:"upper",sub:"pull",impact:false,unil:true,q:"half kneeling single arm kettlebell row form"},
+  {id:"renegade",name:"Renegade row",pattern:"upper",sub:"pull",impact:false,unil:true,q:"single kettlebell renegade row form"},
+  {id:"pullover",name:"Floor pullover",pattern:"upper",sub:"pull",impact:false,q:"kettlebell floor pullover form"},
+  {id:"highpull",name:"Kettlebell high pull",pattern:"upper",sub:"pull",impact:true,q:"kettlebell high pull form"},
   {id:"plank",name:"Plank",pattern:"core",impact:false,hold:true,q:"plank proper form"},
+  {id:"sideplank",name:"Side plank",pattern:"core",impact:false,hold:true,unil:true,q:"side plank proper form"},
   {id:"twist",name:"Russian twist",pattern:"core",impact:false,q:"kettlebell russian twist form"},
   {id:"deadbug",name:"Dead bug",pattern:"core",impact:false,q:"dead bug exercise form"},
   {id:"situp",name:"Sit-up",pattern:"core",impact:false,q:"sit up proper form"},
@@ -144,22 +166,113 @@
  function byId(id){for(var i=0;i<MOVES.length;i++)if(MOVES[i].id===id)return MOVES[i];return null;}
  function vid(q){return "https://www.youtube.com/results?search_query="+encodeURIComponent(q);}
 
+ // Load ladder. One row per move, indexed by 4-week block, clamped at the last value.
+ // Three bells: 25, 35, 50. Legs and carries climb fastest, overhead climbs slowest.
+ var BODYWEIGHT=["pushup","plank","sideplank","deadbug","situp","bounce","knees","jacks"];
+ var LADDER={
+  kbdl:     [25,35,35,50,50],
+  suitdl:   [25,35,35,50,50],
+  bridge:   [25,35,35,50,50],
+  suitcase: [25,35,35,50,50],
+  goblet:   [25,25,35,35,50],
+  rackedsq: [25,25,35,35,50],
+  split:    [25,25,35,35,50],
+  revlunge: [25,25,35,35,50],
+  sldl:     [25,25,35,35,50],
+  racked:   [25,25,35,35,50],
+  swing:    [25,25,35,35],
+  row:      [25,25,35,35,50],
+  kneelrow: [25,25,35,35,50],
+  floorpress:[25,25,35,35,35,50],
+  press:    [25,25,35,35],
+  renegade: [25,25,35,35],
+  pullover: [25,25,35,35],
+  highpull: [25,25,35,35],
+  twist:    [25,25,35,35]
+ };
+ function loadFor(m,block){
+  if(!m)return "";
+  if(BODYWEIGHT.indexOf(m.id)>=0)return "";
+  var L=LADDER[m.id];if(!L)return "25 lb";
+  return L[Math.min(block,L.length-1)]+" lb";
+ }
+ // Once a lift tops out at its heaviest bell, tempo becomes the overload.
+ function technique(block){
+  if(block<=3)return "";
+  if(block===4)return " Lower every rep on a slow 3 count.";
+  if(block===5)return " Slow 3 count down, 1 count pause at the bottom of every rep.";
+  return " Slow 3 count down, pause at the bottom, drive up hard. Same weight, more time under tension.";
+ }
+
  function pick(rng,filter,used){var pool=MOVES.filter(function(m){return filter(m)&&used.indexOf(m.id)<0;});if(!pool.length)pool=MOVES.filter(filter);var m=pool[Math.floor(rng()*pool.length)];used.push(m.id);return m;}
- function reps(base,level){return base+level*2;}
- function loadFor(m,level){if(m.id==="kbdl"||m.id==="goblet"||m.id==="suitcase"||m.id==="racked")return level>=1?"35 lb":"25 lb";if(m.id==="plank"||m.id==="pushup"||m.id==="deadbug"||m.id==="situp"||m.id==="bounce"||m.id==="knees"||m.id==="jacks")return "";return "25 lb";}
- function repLabel(m,base,level){if(m.hold){var s=(m.pattern==="cond")?[40,45,50,60][Math.min(level,3)]:[30,40,40,45][Math.min(level,3)];return s+" sec"+(m.unil?" each side":"");}var r=reps(base,level);return m.unil?(r+" each side"):(r+" reps");}
+ function repLabel(m,base,wk){
+  if(m.hold){var s=(m.pattern==="cond")?(40+wk*5):(30+wk*5);return s+" sec"+(m.unil?" each side":"");}
+  var r=base+wk*2;return m.unil?(r+" each side"):(r+" reps");
+ }
+ function item(m,rep,block){return {m:m,rep:rep,load:loadFor(m,block)};}
 
- function triplet(rng,level,allowImpact){var used=[];var lo=pick(rng,function(m){return m.pattern==="lower"&&(allowImpact||!m.impact);},used);var up=pick(rng,function(m){return m.pattern==="upper"&&(allowImpact||!m.impact);},used);var th=pick(rng,function(m){return (m.pattern==="core"||m.pattern==="cond")&&(allowImpact||!m.impact);},used);return [lo,up,th];}
+ // Anchor lifts hold for a full 4-week block so something actually gets stronger, then rotate.
+ function anchors(block){
+  function pool(f){return MOVES.filter(f);}
+  var sq=pool(function(m){return m.pattern==="lower"&&m.sub==="squat";});
+  var hi=pool(function(m){return m.pattern==="lower"&&m.sub==="hinge"&&!m.impact;});
+  var pu=pool(function(m){return m.pattern==="upper"&&m.sub==="push";});
+  var pl=pool(function(m){return m.pattern==="upper"&&m.sub==="pull"&&!m.impact;});
+  return {squat:sq[block%sq.length],hinge:hi[block%hi.length],push:pu[block%pu.length],pull:pl[block%pl.length]};
+ }
 
- function item(m,rep,level){return {m:m,rep:rep,load:loadFor(m,level)};}
+ // Week shape. Strength Mon and Thu, unpredictable metcon Tue Wed Fri.
+ // Pull shows up 3x a week, push 2x, so the back outworks the chest.
+ var DAYPLAN={
+  1:{type:"strength",lower:"squat",upper:"push",third:"core"},
+  2:{type:"metcon",upper:"pull",third:"cond"},
+  3:{type:"metcon",upper:"push",third:"core"},
+  4:{type:"strength",lower:"hinge",upper:"pull",third:"core"},
+  5:{type:"metcon",upper:"pull",third:"cond"}
+ };
 
- function fmtAMRAP(rng,level,ai){var d=[10,10,12,12][Math.min(level,3)];var t=triplet(rng,level,ai);return {tag:"AMRAP "+d+" min",mins:d,how:"As many rounds as possible in "+d+" minutes. Move steady, rest only as needed.",items:t.map(function(m){return item(m,repLabel(m,10,level),level);})};}
- function fmtEMOM(rng,level,ai){var d=[8,10,10,12][Math.min(level,3)];var t=triplet(rng,level,ai);return {tag:"EMOM "+d+" min",mins:d,how:"Every minute on the minute for "+d+" minutes. Minute 1 is the first move, minute 2 the second, minute 3 the third, then repeat. Rest whatever is left of each minute.",items:t.map(function(m){return item(m,repLabel(m,8,level),level);})};}
- function fmtRFT(rng,level,ai){var r=[3,3,3,4][Math.min(level,3)];var t=triplet(rng,level,ai);return {tag:r+" rounds for time",mins:r*3,how:r+" rounds as fast as you can hold good form. Note your time and try to beat it when this comes up again.",items:t.map(function(m){return item(m,repLabel(m,10,level),level);})};}
- function fmtLadder(rng,level,ai){var lad=[12,9,6];var used=[];var a=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ai||!m.impact);},used);var b=pick(rng,function(m){return m.pattern==="upper"&&!m.hold&&(ai||!m.impact);},used);var c=pick(rng,function(m){return (m.pattern==="core"||m.pattern==="cond");},used);return {tag:"Ladder "+lad.join("-"),mins:9,how:"Do "+lad.join(", then ")+" reps of the first two moves. After each rung, hit the third move for the listed time.",items:[item(a,lad.join("-")+(a.unil?" each side":" reps"),level),item(b,lad.join("-")+(b.unil?" each side":" reps"),level),item(c,repLabel(c,10,level),level)]};}
- function fmtStrength(rng,level,ai){var s=3;var used=[];var a=pick(rng,function(m){return m.pattern==="lower"&&!m.impact&&!m.hold;},used);var b=pick(rng,function(m){return m.pattern==="upper"&&!m.impact&&!m.hold;},used);var fin=byId(ai?"jacks":"knees");var rp=[8,8,6,6][Math.min(level,3)];return {tag:"Strength + finisher",mins:13,how:s+" straight sets of the two lifts, resting about a minute between. Go heavier than a fast day. Finish with a Tabata: 20 seconds on, 10 off, 8 rounds.",items:[item(a,rp+" reps x "+s+" sets",level),item(b,rp+(b.unil?" each side":"")+" x "+s+" sets",level),item(fin,"Tabata 20/10 x 8",level)]};}
- function fmtChipper(rng,level,ai){var used=[];var l=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ai||!m.impact);},used);var u=pick(rng,function(m){return m.pattern==="upper"&&!m.hold&&(ai||!m.impact);},used);var l2=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ai||!m.impact);},used);var co=pick(rng,function(m){return m.pattern==="core"&&!m.hold;},used);var ca=pick(rng,function(m){return m.sub==="carry";},used);var big=[12,15,15,18][Math.min(level,3)];return {tag:"Chipper",mins:11,how:"Work down the list one time, in order. No rounds, just chip away at each move until it is done.",items:[item(l,big+(l.unil?" each side":" reps"),level),item(u,big+(u.unil?" each side":" reps"),level),item(l2,big+(l2.unil?" each side":" reps"),level),item(co,[18,20,22,24][Math.min(level,3)]+" reps",level),item(ca,[40,45,45,50][Math.min(level,3)]+" sec each side",level)]};}
- var FORMATS=[fmtAMRAP,fmtEMOM,fmtRFT,fmtLadder,fmtStrength,fmtChipper];
+ function triplet(rng,ctx){
+  var used=[];
+  var lo=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var up=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&(ctx.allowImpact||!m.impact);},used);
+  var th=pick(rng,function(m){return m.pattern===ctx.plan.third&&(ctx.allowImpact||!m.impact);},used);
+  return [lo,up,th];
+ }
+
+ function fmtAMRAP(rng,ctx){var d=[10,10,12,12][ctx.wk];var t=triplet(rng,ctx);
+  return {tag:"AMRAP "+d+" min",mins:d,how:"As many rounds as possible in "+d+" minutes. Move steady, rest only as needed."+technique(ctx.block),items:t.map(function(m){return item(m,repLabel(m,10,ctx.wk),ctx.block);})};}
+ function fmtEMOM(rng,ctx){var d=[9,9,12,12][ctx.wk];var t=triplet(rng,ctx);
+  return {tag:"EMOM "+d+" min",mins:d,how:"Every minute on the minute for "+d+" minutes. Minute 1 is the first move, minute 2 the second, minute 3 the third, then repeat. Rest whatever is left of each minute."+technique(ctx.block),items:t.map(function(m){return item(m,repLabel(m,8,ctx.wk),ctx.block);})};}
+ function fmtRFT(rng,ctx){var r=[3,3,4,4][ctx.wk];var t=triplet(rng,ctx);
+  return {tag:r+" rounds for time",mins:r*3,how:r+" rounds as fast as you can hold good form. Note your time and try to beat it when this comes up again."+technique(ctx.block),items:t.map(function(m){return item(m,repLabel(m,10,ctx.wk),ctx.block);})};}
+ function fmtLadder(rng,ctx){var lad=[12,9,6];var used=[];
+  var a=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var b=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var c=pick(rng,function(m){return m.pattern===ctx.plan.third&&(ctx.allowImpact||!m.impact);},used);
+  return {tag:"Ladder "+lad.join("-"),mins:10,how:"Do "+lad.join(", then ")+" reps of the first two moves. After each rung, hit the third move for the listed time."+technique(ctx.block),items:[item(a,lad.join("-")+(a.unil?" each side":" reps"),ctx.block),item(b,lad.join("-")+(b.unil?" each side":" reps"),ctx.block),item(c,repLabel(c,10,ctx.wk),ctx.block)]};}
+ function fmtChipper(rng,ctx){var used=[];
+  var l=pick(rng,function(m){return m.pattern==="lower"&&m.sub==="squat"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var u=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var l2=pick(rng,function(m){return m.pattern==="lower"&&m.sub==="hinge"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
+  var co=pick(rng,function(m){return m.pattern==="core"&&!m.hold;},used);
+  var ca=pick(rng,function(m){return m.sub==="carry";},used);
+  var big=[12,14,16,18][ctx.wk];
+  return {tag:"Chipper",mins:12,how:"Work down the list one time, in order. No rounds, just chip away at each move until it is done."+technique(ctx.block),items:[item(l,big+(l.unil?" each side":" reps"),ctx.block),item(u,big+(u.unil?" each side":" reps"),ctx.block),item(l2,big+(l2.unil?" each side":" reps"),ctx.block),item(co,(18+ctx.wk*2)+" reps",ctx.block),item(ca,(40+ctx.wk*5)+" sec each side",ctx.block)]};}
+ var METCONS=[fmtAMRAP,fmtEMOM,fmtRFT,fmtLadder,fmtChipper];
+
+ // Strength day. Same two anchor lifts all block, reps climb 8 to 11, then load or tempo jumps.
+ function fmtStrength(rng,ctx){
+  var A=anchors(ctx.block);
+  var a=(ctx.plan.lower==="squat")?A.squat:A.hinge;
+  var b=(ctx.plan.upper==="push")?A.push:A.pull;
+  var used=[a.id,b.id];
+  var c=pick(rng,function(m){return m.pattern==="core"&&(ctx.allowImpact||!m.impact);},used);
+  var fin=pick(rng,function(m){return m.pattern==="cond"&&(ctx.allowImpact||!m.impact);},used);
+  var rp=8+ctx.wk;var sets=3;
+  return {tag:"Strength + finisher",mins:14,anchor:true,
+   how:sets+" straight sets of the two lifts, about a minute of rest between sets. These two are your anchor lifts for the next four weeks, so push them. Then the core move, then a Tabata finisher: 20 seconds on, 10 off, 8 rounds."+technique(ctx.block),
+   items:[item(a,rp+(a.unil?" each side":" reps")+" x "+sets+" sets",ctx.block),item(b,rp+(b.unil?" each side":" reps")+" x "+sets+" sets",ctx.block),item(c,repLabel(c,12,ctx.wk),ctx.block),item(fin,"Tabata 20/10 x 8",ctx.block)]};
+ }
 
  var BENCH=[
   {name:"The Sourdough",tag:"AMRAP 12 min",mins:12,how:"As many rounds as possible in 12 minutes. Write down your rounds and beat it next time.",items:[{id:"goblet",rep:"10 reps",load:"35 lb"},{id:"pushup",rep:"8 reps",load:""},{id:"row",rep:"8 each side",load:"25 lb"},{id:"bounce",rep:"40 sec",load:""}]},
@@ -172,14 +285,27 @@
  function buildSession(date,noImpact){
   var days=Math.floor((stripTime(date)-START)/86400000);
   var weeks=days<0?0:Math.floor(days/7);
-  var level=Math.min(weeks,3);
+  var block=Math.floor(weeks/4);
+  var wk=weeks%4;
   var allowImpact=(!noImpact)&&(weeks>=2);
   var rng=mulberry32(seedFromDate(date)+(noImpact?777:0));
   var dow=date.getDay();
-  if(dow===5&&weeks>=1&&(weeks%2===1)){var b=BENCH[Math.floor(weeks/2)%BENCH.length];return {benchmark:true,name:b.name,tag:b.tag,how:b.how,weeks:weeks,level:level,allowImpact:allowImpact,items:b.items.map(function(it){return {m:byId(it.id),rep:it.rep,load:it.load};})};}
-  var f=FORMATS[Math.floor(rng()*FORMATS.length)];var s=f(rng,level,allowImpact);s.benchmark=false;s.weeks=weeks;s.level=level;s.allowImpact=allowImpact;return s;
- }
+  var meta={benchmark:false,weeks:weeks,block:block,wk:wk,level:block,allowImpact:allowImpact};
 
+  if(dow===5&&weeks>=1&&(weeks%2===1)){
+   var b=BENCH[Math.floor(weeks/2)%BENCH.length];
+   var bs={benchmark:true,name:b.name,tag:b.tag,mins:b.mins,how:b.how,items:b.items.map(function(it){return {m:byId(it.id),rep:it.rep,load:it.load};})};
+   bs.weeks=weeks;bs.block=block;bs.wk=wk;bs.level=block;bs.allowImpact=allowImpact;return bs;
+  }
+
+  var plan=DAYPLAN[dow]||DAYPLAN[1];
+  var ctx={block:block,wk:wk,allowImpact:allowImpact,plan:plan};
+  var s;
+  if(plan.type==="strength"){s=fmtStrength(rng,ctx);}
+  else{var f=METCONS[Math.floor(rng()*METCONS.length)];s=f(rng,ctx);}
+  s.benchmark=false;s.weeks=weeks;s.block=block;s.wk=wk;s.level=block;s.allowImpact=allowImpact;
+  return s;
+ }
  var DAYNAMES=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
  var MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
  var CHECK='<svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#0E1420" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -223,12 +349,18 @@
   actions.appendChild(watch);actions.appendChild(swap);
   btn.addEventListener("click",function(){checkState[idx]=!checkState[idx];row.classList.toggle("done",checkState[idx]);progressWrap();});
   swap.addEventListener("click",function(){
-   var used=currentItems.map(function(x){return x.m.id;});
    var noImp=noImpactEl.checked||(getWeeks()<2);
-   var pool=MOVES.filter(function(m){return m.pattern===it.m.pattern&&m.id!==it.m.id&&(!noImp||!m.impact)&&(!!m.hold===!!it.m.hold||m.pattern==="core");});
+   var pool=MOVES.filter(function(m){
+    if(m.pattern!==it.m.pattern||m.id===it.m.id)return false;
+    if(noImp&&m.impact)return false;
+    if(it.m.pattern==="upper"&&m.sub!==it.m.sub)return false;   // a push swaps for a push, a pull for a pull
+    if(it.m.pattern==="lower"&&m.sub!==it.m.sub)return false;   // a squat swaps for a squat, a hinge for a hinge
+    if(it.m.sub==="carry")return m.sub==="carry";
+    return (!!m.hold===!!it.m.hold)||it.m.pattern==="core";
+   });
    if(!pool.length)return;
    var nm2=pool[Math.floor(Math.random()*pool.length)];
-   it.m=nm2;it.load=loadFor(nm2,getLevel());
+   it.m=nm2;it.load=loadFor(nm2,getBlock());
    nm.textContent=nm2.name;det.textContent=it.rep+(it.load?"  ·  "+it.load:"");watch.href=vid(nm2.q);
    var ex=body.querySelector(".impact-flag");if(ex)ex.remove();
   });
@@ -236,7 +368,7 @@
   return row;
  }
  function getWeeks(){var d=Math.floor((stripTime(new Date())-START)/86400000);return d<0?0:Math.floor(d/7);}
- function getLevel(){return Math.min(getWeeks(),3);}
+ function getBlock(){return Math.floor(getWeeks()/4);}
 
  function renderSession(){
   sessionEl.innerHTML="";checkState=[];
@@ -254,7 +386,7 @@
   var how=document.createElement("div");how.className="format-how";how.textContent=s.how;fmt.appendChild(how);
   sessionEl.appendChild(fmt);
 
-  var warm=document.createElement("div");warm.className="warm";warm.innerHTML="<b>Warm up:</b> 5 minutes easy on the rebounder first. Always.";sessionEl.appendChild(warm);
+  var warm=document.createElement("div");warm.className="warm";warm.innerHTML='<b>Warm up:</b> 5 minutes easy on the rebounder, then 5 halos each direction with the 25. Always. <a class="watch" style="margin-left:6px" href="'+vid("kettlebell halo form")+'" target="_blank" rel="noopener">'+PLAY+'Halo</a>';sessionEl.appendChild(warm);
 
   var prog=document.createElement("div");prog.className="progress";prog.innerHTML='<span id="pText">0 of 0</span><div class="bar"><i id="pBar"></i></div>';sessionEl.appendChild(prog);
 
@@ -264,25 +396,64 @@
 
  if(days<0){eyebrow.textContent="Starts Monday, July 13";sublineEl.textContent="Here's Monday's session as a preview.";}
  else if(dow===0||dow===6){eyebrow.textContent="Weekend";sublineEl.textContent="Rest, or an easy 5 minute bounce if you want it.";}
- else{var wk=getWeeks();eyebrow.textContent="Week "+(wk+1)+"  ·  Workout of the day";sublineEl.textContent="Decided for you. Warm up, then go.";toggleRow.hidden=false;}
+ else{var wk=getWeeks();eyebrow.textContent="Week "+(wk+1)+"  ·  Block "+(getBlock()+1)+"  ·  Workout of the day";sublineEl.textContent="Decided for you. Warm up, then go.";toggleRow.hidden=false;}
 
- noImpactEl.addEventListener("change",renderSession);
+ noImpactEl.addEventListener("change",function(){renderSession();renderGlance();});
  renderSession();
 
  var glance=document.getElementById("glance");
- var monday=stripTime(now);
- var shift=(dow===0?-6:1-dow);
- monday.setDate(monday.getDate()+shift);
+ var CHEV='<svg class="g-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
  var labels=["Mon","Tue","Wed","Thu","Fri"];
- for(var i=0;i<5;i++){
-  var d=new Date(monday);d.setDate(monday.getDate()+i);
-  var s=buildSession(d,false);
-  var tag=s.benchmark?("Benchmark · "+s.name):s.tag;
-  var isNow=(d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate());
-  var row=document.createElement("div");row.className="g-row"+(isNow?" now":"");
-  row.innerHTML='<span class="g-day">'+labels[i]+'</span><span class="g-tag">'+tag+'</span>';
-  glance.appendChild(row);
+
+ function previewRow(it){
+  var row=document.createElement("div");row.className="p-ex";
+  var body=document.createElement("div");body.className="p-body";
+  var nm=document.createElement("div");nm.className="p-name";nm.textContent=it.m.name;
+  var det=document.createElement("div");det.className="p-det";det.textContent=it.rep+(it.load?"  ·  "+it.load:"");
+  body.appendChild(nm);body.appendChild(det);
+  if(it.m.impact){var fl=document.createElement("div");fl.className="p-flag";fl.textContent="Ballistic";body.appendChild(fl);}
+  var watch=document.createElement("a");watch.className="watch";watch.href=vid(it.m.q);watch.target="_blank";watch.rel="noopener";watch.innerHTML=PLAY+"Watch";
+  row.appendChild(body);row.appendChild(watch);
+  return row;
  }
+
+ function glanceItem(d,label,isNow){
+  var s=buildSession(d,noImpactEl.checked);
+  var tagText=s.benchmark?("Benchmark · "+s.name):s.tag;
+  var item=document.createElement("div");item.className="g-item"+(isNow?" now":"");
+
+  var btn=document.createElement("button");btn.className="g-row";btn.type="button";btn.setAttribute("aria-expanded","false");
+  btn.innerHTML='<span class="g-day">'+label+'</span><span class="g-tag"></span>'+CHEV;
+  btn.querySelector(".g-tag").textContent=tagText;
+
+  var det=document.createElement("div");det.className="g-detail";
+  var mins=(s.mins||11);
+  var tm=document.createElement("div");tm.className="g-time";tm.textContent="About "+(mins+5)+" min total  ·  5 warmup + "+mins+" work";
+  var how=document.createElement("div");how.className="g-how";how.textContent=s.how;
+  det.appendChild(tm);det.appendChild(how);
+  s.items.forEach(function(it){det.appendChild(previewRow(it));});
+
+  btn.addEventListener("click",function(){
+   var open=item.classList.toggle("open");
+   btn.setAttribute("aria-expanded",open?"true":"false");
+  });
+
+  item.appendChild(btn);item.appendChild(det);
+  return item;
+ }
+
+ function renderGlance(){
+  glance.innerHTML="";
+  var monday=stripTime(now);
+  var shift=(dow===0?-6:1-dow);
+  monday.setDate(monday.getDate()+shift);
+  for(var i=0;i<5;i++){
+   var d=new Date(monday);d.setDate(monday.getDate()+i);
+   var isNow=(d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate());
+   glance.appendChild(glanceItem(d,labels[i],isNow));
+  }
+ }
+ renderGlance();
 
  var loadedKey=now.getDate()+"-"+now.getMonth()+"-"+now.getFullYear();
  function rollover(){var d=new Date();var k=d.getDate()+"-"+d.getMonth()+"-"+d.getFullYear();if(k!==loadedKey)location.reload();}
