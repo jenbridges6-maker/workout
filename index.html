@@ -159,16 +159,21 @@
   {id:"situp",name:"Sit-up",pattern:"core",impact:false,q:"sit up proper form"},
   {id:"suitcase",name:"Suitcase carry",pattern:"core",sub:"carry",impact:false,hold:true,q:"kettlebell suitcase carry form"},
   {id:"racked",name:"Racked carry",pattern:"core",sub:"carry",impact:false,hold:true,q:"kettlebell front racked carry form"},
-  {id:"bounce",name:"Fast bounce",pattern:"cond",impact:false,hold:true,q:"rebounder cardio bounce"},
-  {id:"knees",name:"High knees on rebounder",pattern:"cond",impact:false,hold:true,q:"rebounder high knees"},
-  {id:"jacks",name:"Jumping jacks on rebounder",pattern:"cond",impact:true,hold:true,q:"rebounder jumping jacks"}
+  {id:"bounce",name:"Fast bounce",pattern:"cond",impact:false,hold:true,q:"mini trampoline health bounce"},
+  {id:"knees",name:"High knees",pattern:"cond",impact:false,hold:true,q:"mini trampoline high knees"},
+  {id:"side",name:"Side-to-side bounce",pattern:"cond",impact:false,hold:true,q:"mini trampoline side to side"},
+  {id:"twistb",name:"Twist bounce",pattern:"cond",impact:false,hold:true,q:"mini trampoline twist bounce"},
+  {id:"heels",name:"Heel digs",pattern:"cond",impact:false,hold:true,q:"mini trampoline heel digs"},
+  {id:"jog",name:"Jog in place",pattern:"cond",impact:false,hold:true,q:"mini trampoline jog in place"},
+  {id:"jacks",name:"Jumping jacks",pattern:"cond",impact:true,hold:true,q:"mini trampoline jumping jacks"},
+  {id:"ski",name:"Ski jumps",pattern:"cond",impact:true,hold:true,q:"mini trampoline ski jumps"}
  ];
  function byId(id){for(var i=0;i<MOVES.length;i++)if(MOVES[i].id===id)return MOVES[i];return null;}
  function vid(q){return "https://www.youtube.com/results?search_query="+encodeURIComponent(q);}
 
  // Load ladder. One row per move, indexed by 4-week block, clamped at the last value.
  // Three bells: 25, 35, 50. Legs and carries climb fastest, overhead climbs slowest.
- var BODYWEIGHT=["pushup","plank","sideplank","deadbug","situp","bounce","knees","jacks"];
+ var BODYWEIGHT=["pushup","plank","sideplank","deadbug","situp","bounce","knees","side","twistb","heels","jog","jacks","ski"];
  var LADDER={
   kbdl:     [25,35,35,50,50],
   suitdl:   [25,35,35,50,50],
@@ -232,7 +237,7 @@
  };
 
  function triplet(rng,ctx){
-  var used=[];
+  var used=ctx.used;
   var lo=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
   var up=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&(ctx.allowImpact||!m.impact);},used);
   var th=pick(rng,function(m){return m.pattern===ctx.plan.third&&(ctx.allowImpact||!m.impact);},used);
@@ -245,12 +250,12 @@
   return {tag:"EMOM "+d+" min",mins:d,how:"Every minute on the minute for "+d+" minutes. Minute 1 is the first move, minute 2 the second, minute 3 the third, then repeat. Rest whatever is left of each minute."+technique(ctx.block),items:t.map(function(m){return item(m,repLabel(m,8,ctx.wk),ctx.block);})};}
  function fmtRFT(rng,ctx){var r=[3,3,4,4][ctx.wk];var t=triplet(rng,ctx);
   return {tag:r+" rounds for time",mins:r*3,how:r+" rounds as fast as you can hold good form. Note your time and try to beat it when this comes up again."+technique(ctx.block),items:t.map(function(m){return item(m,repLabel(m,10,ctx.wk),ctx.block);})};}
- function fmtLadder(rng,ctx){var lad=[12,9,6];var used=[];
+ function fmtLadder(rng,ctx){var lad=[12,9,6];var used=ctx.used;
   var a=pick(rng,function(m){return m.pattern==="lower"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
   var b=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
   var c=pick(rng,function(m){return m.pattern===ctx.plan.third&&(ctx.allowImpact||!m.impact);},used);
   return {tag:"Ladder "+lad.join("-"),mins:10,how:"Do "+lad.join(", then ")+" reps of the first two moves. After each rung, hit the third move for the listed time."+technique(ctx.block),items:[item(a,lad.join("-")+(a.unil?" each side":" reps"),ctx.block),item(b,lad.join("-")+(b.unil?" each side":" reps"),ctx.block),item(c,repLabel(c,10,ctx.wk),ctx.block)]};}
- function fmtChipper(rng,ctx){var used=[];
+ function fmtChipper(rng,ctx){var used=ctx.used;
   var l=pick(rng,function(m){return m.pattern==="lower"&&m.sub==="squat"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
   var u=pick(rng,function(m){return m.pattern==="upper"&&m.sub===ctx.plan.upper&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
   var l2=pick(rng,function(m){return m.pattern==="lower"&&m.sub==="hinge"&&!m.hold&&(ctx.allowImpact||!m.impact);},used);
@@ -265,7 +270,7 @@
   var A=anchors(ctx.block);
   var a=(ctx.plan.lower==="squat")?A.squat:A.hinge;
   var b=(ctx.plan.upper==="push")?A.push:A.pull;
-  var used=[a.id,b.id];
+  var used=ctx.used;
   var c=pick(rng,function(m){return m.pattern==="core"&&(ctx.allowImpact||!m.impact);},used);
   var fin=pick(rng,function(m){return m.pattern==="cond"&&(ctx.allowImpact||!m.impact);},used);
   var rp=8+ctx.wk;var sets=3;
@@ -282,29 +287,52 @@
  var START=new Date(2026,6,13);
  function stripTime(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
 
- function buildSession(date,noImpact){
+ function mondayOf(date){
   var days=Math.floor((stripTime(date)-START)/86400000);
+  var weeks=days<0?0:Math.floor(days/7);
+  return new Date(START.getFullYear(),START.getMonth(),START.getDate()+weeks*7);
+ }
+
+ // Build a whole Mon-Fri week at once so the days can see each other. One shared
+ // "used" list threads through every random pick, so a move can't land two days
+ // running, and it starts pre-loaded with this block's four anchor lifts so the
+ // conditioning days never re-pick the very lift the strength days are built on.
+ // Still fully deterministic: the week is seeded off its own Monday, so any day
+ // rebuilds the identical week and refreshing never rerolls.
+ function buildWeek(date,noImpact){
+  var mon=mondayOf(date);
+  var days=Math.floor((stripTime(mon)-START)/86400000);
   var weeks=days<0?0:Math.floor(days/7);
   var block=Math.floor(weeks/4);
   var wk=weeks%4;
   var allowImpact=(!noImpact)&&(weeks>=2);
-  var rng=mulberry32(seedFromDate(date)+(noImpact?777:0));
-  var dow=date.getDay();
-  var meta={benchmark:false,weeks:weeks,block:block,wk:wk,level:block,allowImpact:allowImpact};
-
-  if(dow===5&&weeks>=1&&(weeks%2===1)){
-   var b=BENCH[Math.floor(weeks/2)%BENCH.length];
-   var bs={benchmark:true,name:b.name,tag:b.tag,mins:b.mins,how:b.how,items:b.items.map(function(it){return {m:byId(it.id),rep:it.rep,load:it.load};})};
-   bs.weeks=weeks;bs.block=block;bs.wk=wk;bs.level=block;bs.allowImpact=allowImpact;return bs;
+  var rng=mulberry32(seedFromDate(mon)+(noImpact?777:0));
+  var A=anchors(block);
+  var usedWeek=[A.squat.id,A.push.id,A.hinge.id,A.pull.id];
+  var week={};
+  for(var i=0;i<5;i++){
+   var d=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i);
+   var dow=d.getDay();
+   var s;
+   if(dow===5&&weeks>=1&&(weeks%2===1)){
+    var b=BENCH[Math.floor(weeks/2)%BENCH.length];
+    s={benchmark:true,name:b.name,tag:b.tag,mins:b.mins,how:b.how,items:b.items.map(function(it){return {m:byId(it.id),rep:it.rep,load:it.load};})};
+   }else{
+    var plan=DAYPLAN[dow]||DAYPLAN[1];
+    var ctx={block:block,wk:wk,allowImpact:allowImpact,plan:plan,used:usedWeek};
+    if(plan.type==="strength"){s=fmtStrength(rng,ctx);}
+    else{var f=METCONS[Math.floor(rng()*METCONS.length)];s=f(rng,ctx);}
+    s.benchmark=false;
+   }
+   s.weeks=weeks;s.block=block;s.wk=wk;s.level=block;s.allowImpact=allowImpact;
+   week[dow]=s;
   }
+  return week;
+ }
 
-  var plan=DAYPLAN[dow]||DAYPLAN[1];
-  var ctx={block:block,wk:wk,allowImpact:allowImpact,plan:plan};
-  var s;
-  if(plan.type==="strength"){s=fmtStrength(rng,ctx);}
-  else{var f=METCONS[Math.floor(rng()*METCONS.length)];s=f(rng,ctx);}
-  s.benchmark=false;s.weeks=weeks;s.block=block;s.wk=wk;s.level=block;s.allowImpact=allowImpact;
-  return s;
+ function buildSession(date,noImpact){
+  var week=buildWeek(date,noImpact);
+  return week[date.getDay()]||week[1];
  }
  var DAYNAMES=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
  var MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
