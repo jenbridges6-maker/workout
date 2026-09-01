@@ -86,13 +86,27 @@
   .rest p{color:var(--muted);font-size:14px;margin:0;}
 
   .week{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
-  .wrow{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--line);}
-  .wrow:last-child{border-bottom:none;}
+  .wrow{display:flex;align-items:center;gap:12px;padding:13px 15px;}
+  .wdetail:last-child{border-bottom:none;}
   .wrow.now{background:var(--surface-2);}
   .wday{font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;font-size:13px;width:44px;flex:0 0 44px;color:var(--muted);}
   .wrow.now .wday{color:var(--gold);}
   .wtext{font-size:13.5px;color:var(--text);flex:1;min-width:0;}
   .wtext em{color:var(--muted);font-style:normal;}
+  .wrow{cursor:pointer;text-align:left;width:100%;background:none;border:none;border-bottom:1px solid var(--line);color:inherit;font:inherit;}
+  .wrow:focus-visible{outline:3px solid var(--gold);outline-offset:-3px;}
+  .wcaret{flex:0 0 12px;color:var(--muted);font-size:11px;transition:transform .18s ease;}
+  .wrow[aria-expanded="true"] .wcaret{transform:rotate(90deg);}
+  .wdetail{display:none;padding:2px 15px 16px 71px;border-bottom:1px solid var(--line);background:var(--surface-2);}
+  .wdetail.open{display:block;}
+  .wdetail h4{font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;font-size:11px;color:var(--muted);margin:12px 0 5px;}
+  .wdetail h4:first-child{margin-top:8px;}
+  .wdetail p{margin:0;font-size:13px;color:var(--text);}
+  .wdetail .l{font-size:13.5px;color:var(--text);margin:0 0 2px;}
+  .wdetail .l b{font-weight:600;}
+  .wdetail .r{color:var(--gold);font-size:12.5px;}
+  .wdetail .q{color:var(--muted);font-size:12.5px;margin:1px 0 0;}
+  @media (prefers-reduced-motion:reduce){.wcaret{transition:none;}}
 
   .score{margin-top:12px;}
   .score label{display:block;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
@@ -158,7 +172,7 @@
 
   <div id="main"></div>
 
-  <div class="sec-label">This week</div>
+  <div class="sec-label">This week \u00b7 tap a day</div>
   <div class="week" id="week"></div>
 
   <div class="foot">
@@ -587,6 +601,34 @@ function updateProgress(){
   document.getElementById("progressBar").style.width=(done/all.length*100)+"%";
 }
 
+function weekDetail(dt){
+  var dow=stripTime(dt).getDay();
+  if(dow===2||dow===4){
+    var s=sessionFor(dt,noImpact,false);
+    var h='<h4>Warm up</h4><p>'+esc(s.warm)+'</p>';
+    h+='<h4>Strength \u00b7 '+s.rounds+' rounds</h4>';
+    h+='<p class="l"><b>'+esc(s.A.mv.name)+'</b><br><span class="r">'+esc(s.A.rep+" \u00b7 "+s.A.load)+'</span></p>';
+    h+='<p class="l" style="margin-top:7px;"><b>'+esc(s.B.mv.name)+'</b><br><span class="r">'+esc(s.B.rep+" \u00b7 "+s.B.load)+'</span></p>';
+    if(s.fin){
+      h+='<h4>Finisher \u00b7 '+esc(s.fin.tag)+'</h4>';
+      if(s.fin.benchmark)h+='<p class="l" style="color:var(--coral);">'+esc(s.fin.name)+'</p>';
+      for(var i=0;i<s.fin.items.length;i++)h+='<p class="q">'+esc(s.fin.items[i].text)+'</p>';
+    }
+    return h;
+  }
+  var o=optionsFor(dt),out='<h4>Pick one, or skip it</h4>';
+  for(var j=0;j<o.length;j++){
+    out+='<p class="l" style="margin-top:'+(j?7:0)+'px;"><b>'+esc(o[j].tool)+'</b> <span class="r">'+esc(o[j].time)+'</span></p>';
+    out+='<p class="q">'+esc(o[j].how)+'</p>';
+  }
+  return out;
+}
+function toggleWeekDay(i){
+  var row=document.getElementById("wrow"+i),det=document.getElementById("wdet"+i);
+  if(!row||!det)return;
+  var open=det.classList.toggle("open");
+  row.setAttribute("aria-expanded",open?"true":"false");
+}
 function renderWeek(){
   var mon=mondayOf(today);
   var labels=["Mon","Tue","Wed","Thu","Fri"];
@@ -602,7 +644,11 @@ function renderWeek(){
     } else {
       txt='<em>Optional \u00b7 walk, bounce, or row</em>';
     }
-    html+='<div class="wrow'+(isNow?" now":"")+'"><div class="wday">'+labels[i]+'</div><div class="wtext">'+txt+'</div></div>';
+    html+='<button class="wrow'+(isNow?" now":"")+'" id="wrow'+i+'" aria-expanded="false" aria-controls="wdet'+i+'" onclick="toggleWeekDay('+i+')">'
+        +'<span class="wday">'+labels[i]+'</span>'
+        +'<span class="wtext">'+txt+'</span>'
+        +'<span class="wcaret">\u25b6</span></button>'
+        +'<div class="wdetail" id="wdet'+i+'">'+weekDetail(dt)+'</div>';
   }
   document.getElementById("week").innerHTML=html;
 }
