@@ -80,6 +80,10 @@
   .opt-how{font-size:13.5px;color:var(--muted);margin-top:7px;}
   .opt-where{font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;}
   .opt .btn{margin:13px 0 0;padding:12px;font-size:13.5px;}
+  .altlink{display:block;width:100%;background:none;border:none;color:var(--muted);font-family:'Inter',sans-serif;font-size:12.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:8px 0 2px;margin:0 0 4px;}
+  .altlink:focus-visible{outline:3px solid var(--gold);outline-offset:2px;border-radius:6px;}
+  .altbox{display:none;padding-top:8px;}
+  .altbox.open{display:block;}
 
   .rest{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px 18px;text-align:center;margin-top:22px;}
   .rest h2{font-family:'Oswald',sans-serif;font-weight:600;font-size:24px;margin:0 0 6px;letter-spacing:0.02em;}
@@ -378,8 +382,13 @@ function finisherFor(date,dayKey,noImpact){
             items:[{text:"Odd minutes: "+two[0].text,q:two[0].q},{text:"Even minutes: "+two[1].text,q:two[1].q}],
             timer:emomSegs(6)};
   }
-  return {tag:"30 / 30 x 6",mins:6,how:"30 seconds of work, 30 seconds rest. Rotate through the list twice.",
-          items:items,timer:intervalSegs(items,6)};
+  var tItems=picked.map(function(m){return {text:finPlain(m),q:m.q};});
+  return {tag:"30 seconds on, 30 off",mins:6,how:"Work the full 30 seconds, then rest 30. Six work intervals, so you go through the list twice. No rep counting, just move until it beeps.",
+          items:tItems,timer:intervalSegs(tItems,6)};
+}
+function finPlain(m){
+  if(m.id==="row"||m.id==="rowm")return "Row, steady hard effort";
+  return m.name+(m.unil?", switch sides halfway":"");
 }
 function finText(m,rng){
   if(m.kind==="hold")return "30 seconds "+m.name.toLowerCase()+(m.unil?" each side":"");
@@ -501,18 +510,26 @@ function render(){
 
   if(!isTraining){
     document.getElementById("eyebrow").textContent="Optional";
-    document.getElementById("subline").textContent="Pick one, or skip it. Nothing here is required.";
-    var opts=optionsFor(today),html="";
-    for(var i=0;i<opts.length;i++){
-      var o=opts[i];
-      html+='<div class="opt">'
-        +'<div class="opt-tool">'+esc(o.tool)+'</div>'
-        +'<div class="opt-time">'+esc(o.time)+'</div>'
-        +'<div class="opt-how">'+esc(o.how)+'</div>'
-        +'<div class="opt-where">'+esc(o.where)+'</div>'
+    document.getElementById("subline").textContent="Already picked. Do it or skip it, but don't deliberate.";
+    var opts=optionsFor(today),o=opts[0],html="";
+    html+='<div class="opt">'
+      +'<div class="opt-tool">'+esc(o.tool)+'</div>'
+      +'<div class="opt-time">'+esc(o.time)+'</div>'
+      +'<div class="opt-how">'+esc(o.how)+'</div>'
+      +'<button class="btn ghost" onclick="startTimer(0,\'opt\')">Start timer</button>'
+      +'</div>';
+    html+='<button class="altlink" id="altBtn" aria-expanded="false" aria-controls="altBox" onclick="toggleAlt()">Basement free today?</button>'
+      +'<div class="altbox" id="altBox">';
+    for(var i=1;i<opts.length;i++){
+      var a=opts[i];
+      html+='<div class="opt" style="margin-bottom:'+(i<opts.length-1?11:0)+'px;">'
+        +'<div class="opt-tool">'+esc(a.tool)+'</div>'
+        +'<div class="opt-time">'+esc(a.time)+'</div>'
+        +'<div class="opt-how">'+esc(a.how)+'</div>'
         +'<button class="btn ghost" onclick="startTimer('+i+',\'opt\')">Start timer</button>'
         +'</div>';
     }
+    html+='</div>';
     main.innerHTML=html;
     updateProgress();renderWeek();return;
   }
@@ -578,6 +595,13 @@ function scorePrev(name,blk){
   for(var i=0;i<h.length;i++)if(h[i].b<blk&&(!best||h[i].b>best.b))best=h[i];
   return best?best.v:null;
 }
+function toggleAlt(){
+  var b=document.getElementById("altBtn"),x=document.getElementById("altBox");
+  if(!b||!x)return;
+  var open=x.classList.toggle("open");
+  b.setAttribute("aria-expanded",open?"true":"false");
+  b.textContent=open?"Never mind, use the walking pad":"Basement free today?";
+}
 function saveScore(name,blk,val){
   var h=scoreHist(name),found=false;
   for(var i=0;i<h.length;i++)if(h[i].b===blk){h[i].v=val;found=true;}
@@ -616,11 +640,10 @@ function weekDetail(dt){
     }
     return h;
   }
-  var o=optionsFor(dt),out='<h4>Pick one, or skip it</h4>';
-  for(var j=0;j<o.length;j++){
-    out+='<p class="l" style="margin-top:'+(j?7:0)+'px;"><b>'+esc(o[j].tool)+'</b> <span class="r">'+esc(o[j].time)+'</span></p>';
-    out+='<p class="q">'+esc(o[j].how)+'</p>';
-  }
+  var o=optionsFor(dt);
+  var out='<h4>Optional</h4>';
+  out+='<p class="l"><b>'+esc(o[0].tool)+'</b> <span class="r">'+esc(o[0].time)+'</span></p>';
+  out+='<p class="q">'+esc(o[0].how)+'</p>';
   return out;
 }
 function toggleWeekDay(i){
@@ -642,7 +665,7 @@ function renderWeek(){
       txt=s.A.mv.name+" and "+s.B.mv.name.toLowerCase();
       if(s.fin&&s.fin.benchmark)txt+=" \u00b7 "+s.fin.name;
     } else {
-      txt='<em>Optional \u00b7 walk, bounce, or row</em>';
+      txt='<em>Optional \u00b7 '+optionsFor(dt)[0].tool.toLowerCase()+', '+optionsFor(dt)[0].time+'</em>';
     }
     html+='<button class="wrow'+(isNow?" now":"")+'" id="wrow'+i+'" aria-expanded="false" aria-controls="wdet'+i+'" onclick="toggleWeekDay('+i+')">'
         +'<span class="wday">'+labels[i]+'</span>'
@@ -654,19 +677,55 @@ function renderWeek(){
 }
 
 /* ---------- timer engine ---------- */
-var T={segs:[],i:0,left:0,running:false,tick:null,ctx:null};
-function beep(freq,dur){
+/* Timing is read off the wall clock, not counted ticks, so a dimming screen
+   or a throttled tab cannot make the timer drift or stall. */
+var T={segs:[],i:0,left:0,running:false,tick:null,ctx:null,segEnd:0,lastBeep:-1,wake:null,hum:null};
+
+function audio(){
   try{
     if(!T.ctx)T.ctx=new (window.AudioContext||window.webkitAudioContext)();
-    var o=T.ctx.createOscillator(),g=T.ctx.createGain();
-    o.frequency.value=freq;o.type="sine";
-    g.gain.setValueAtTime(0.0001,T.ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3,T.ctx.currentTime+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,T.ctx.currentTime+dur);
-    o.connect(g);g.connect(T.ctx.destination);
-    o.start();o.stop(T.ctx.currentTime+dur+0.02);
+    if(T.ctx.state==="suspended"&&T.ctx.resume)T.ctx.resume();
+    return T.ctx;
+  }catch(e){return null;}
+}
+function beep(freq,dur,vol){
+  var c=audio();if(!c)return;
+  try{
+    var o=c.createOscillator(),g=c.createGain(),t0=c.currentTime;
+    o.frequency.value=freq;o.type="square";
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(vol||0.45,t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g);g.connect(c.destination);
+    o.start(t0);o.stop(t0+dur+0.02);
   }catch(e){}
 }
+/* Two tones at the switch, so a minute change is unmistakable. */
+function segBeep(){beep(1000,0.2,0.55);setTimeout(function(){beep(1360,0.26,0.55);},180);}
+/* An inaudible tone holds the audio context open. Without it iOS suspends
+   audio during a quiet 60 second minute and the next beep never plays. */
+function holdAudio(){
+  var c=audio();if(!c||T.hum)return;
+  try{
+    var o=c.createOscillator(),g=c.createGain();
+    g.gain.value=0.0001;o.frequency.value=30;
+    o.connect(g);g.connect(c.destination);o.start();
+    T.hum={o:o};
+  }catch(e){}
+}
+function dropAudio(){try{if(T.hum){T.hum.o.stop();T.hum=null;}}catch(e){}}
+/* Keep the screen awake while a timer runs. */
+function wakeOn(){
+  try{
+    if(navigator.wakeLock&&!T.wake)
+      navigator.wakeLock.request("screen").then(function(l){T.wake=l;}).catch(function(){});
+  }catch(e){}
+}
+function wakeOff(){try{if(T.wake){T.wake.release();T.wake=null;}}catch(e){}}
+document.addEventListener("visibilitychange",function(){
+  if(document.visibilityState==="visible"&&T.running){wakeOn();audio();}
+});
+
 function clip(t,n){
   if(t.length<=n)return t;
   var cut=t.slice(0,n+1),sp=cut.lastIndexOf(" ");
@@ -690,7 +749,7 @@ function startTimer(idx,kind){
     if(!s2.fin)return;
     segs=s2.fin.timer.slice();title=s2.fin.benchmark?s2.fin.name:"Finisher";
   }
-  T.segs=segs;T.i=0;T.left=segs[0][1];T.running=false;
+  T.segs=segs;T.i=0;T.left=segs[0][1];T.running=false;T.lastBeep=-1;
   document.getElementById("tTitle").textContent=title;
   document.getElementById("tToggle").textContent="Start";
   document.getElementById("timer").classList.add("on");
@@ -712,39 +771,61 @@ function paintTimer(){
   document.getElementById("tCount").textContent="Step "+(T.i+1)+" of "+T.segs.length;
   track.style.width=(100-(T.left/total*100))+"%";
 }
-function timerStep(){
-  T.left--;
-  if(T.left<=3&&T.left>0)beep(660,0.07);
-  if(T.left<=0){
-    T.i++;
-    if(T.i>=T.segs.length){
-      stopTimer();
-      beep(880,0.18);setTimeout(function(){beep(1100,0.25);},200);
-      document.getElementById("tPhase").textContent="Done";
-      document.getElementById("tClock").textContent="0:00";
-      document.getElementById("tSub").textContent="";
-      document.getElementById("tCount").textContent="Finished";
-      document.getElementById("tToggle").textContent="Start";
-      return;
-    }
-    beep(920,0.14);
-    T.left=T.segs[T.i][1];
-  }
-  paintTimer();
+function finishTimer(){
+  stopTimer();
+  beep(880,0.22,0.55);
+  setTimeout(function(){beep(1180,0.3,0.55);},220);
+  document.getElementById("tPhase").className="t-phase go";
+  document.getElementById("tPhase").textContent="Done";
+  document.getElementById("tClock").textContent="0:00";
+  document.getElementById("tSub").textContent="";
+  document.getElementById("tCount").textContent="Finished";
+  document.getElementById("tToggle").textContent="Start";
+  document.getElementById("tTrack").style.width="100%";
 }
-function stopTimer(){T.running=false;if(T.tick){clearInterval(T.tick);T.tick=null;}}
+function timerStep(){
+  var now=Date.now();
+  /* catch up if the tab was suspended across one or more whole segments */
+  while(now>=T.segEnd&&T.i<T.segs.length){
+    T.i++;
+    if(T.i>=T.segs.length){finishTimer();return;}
+    segBeep();
+    T.lastBeep=-1;
+    T.segEnd+=T.segs[T.i][1]*1000;
+  }
+  var remain=Math.ceil((T.segEnd-now)/1000);
+  if(remain<0)remain=0;
+  if(remain!==T.left){
+    T.left=remain;
+    if(remain<=3&&remain>0&&T.lastBeep!==remain){T.lastBeep=remain;beep(760,0.1,0.4);}
+    paintTimer();
+  }
+}
+function stopTimer(){
+  T.running=false;
+  if(T.tick){clearInterval(T.tick);T.tick=null;}
+  wakeOff();dropAudio();
+}
 document.getElementById("tToggle").addEventListener("click",function(){
-  if(T.running){stopTimer();this.textContent="Resume";return;}
-  if(T.i>=T.segs.length){T.i=0;T.left=T.segs[0][1];paintTimer();}
-  beep(760,0.12);
+  if(T.running){
+    stopTimer();
+    T.left=Math.max(0,Math.ceil((T.segEnd-Date.now())/1000));
+    this.textContent="Resume";return;
+  }
+  if(T.i>=T.segs.length){T.i=0;T.left=T.segs[0][1];T.lastBeep=-1;paintTimer();}
+  audio();holdAudio();wakeOn();
+  beep(820,0.14,0.5);
+  T.segEnd=Date.now()+T.left*1000;
   T.running=true;this.textContent="Pause";
-  T.tick=setInterval(timerStep,1000);
+  T.tick=setInterval(timerStep,200);
 });
 document.getElementById("tSkip").addEventListener("click",function(){
   if(!T.segs.length)return;
   T.i++;
-  if(T.i>=T.segs.length){T.i=T.segs.length-1;T.left=0;paintTimer();return;}
-  T.left=T.segs[T.i][1];beep(920,0.1);paintTimer();
+  if(T.i>=T.segs.length){T.i=T.segs.length-1;T.left=0;T.segEnd=Date.now();paintTimer();return;}
+  T.left=T.segs[T.i][1];T.lastBeep=-1;
+  T.segEnd=Date.now()+T.left*1000;
+  beep(920,0.12,0.45);paintTimer();
 });
 document.getElementById("tClose").addEventListener("click",function(){
   stopTimer();
