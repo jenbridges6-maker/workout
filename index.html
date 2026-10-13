@@ -116,6 +116,12 @@
   .score label{display:block;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
   .score input{width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;font-size:15px;font-family:'Inter',sans-serif;}
   .score input:focus{outline:2px solid var(--gold);outline-offset:1px;}
+  .wchip{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;}
+  .wchip button{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);font-size:18px;line-height:1;cursor:pointer;}
+  .wchip span{font-family:'Oswald',sans-serif;font-weight:600;color:var(--gold);font-size:17px;min-width:56px;text-align:center;}
+  .wchip em{font-style:normal;font-size:11.5px;color:var(--muted);}
+  .logrow{padding:11px 15px;border-bottom:1px solid var(--line);font-size:14px;}
+  .logrow .r{color:var(--muted);font-size:12.5px;}
   .score .prev{font-size:12px;color:var(--muted);margin-top:6px;}
 
   .foot{margin-top:30px;font-size:12px;color:var(--muted);text-align:center;line-height:1.7;}
@@ -176,11 +182,14 @@
 
   <div id="main"></div>
 
-  <div class="sec-label">This week \u00b7 tap a day</div>
+  <div class="sec-label">This week &middot; tap a day</div>
   <div class="week" id="week"></div>
 
+  <div class="sec-label">Your log</div>
+  <div class="week" id="logList"></div>
+
   <div class="foot">
-    Tuesday and Thursday are the plan.<br />Monday, Wednesday and Friday are optional.
+    Monday, Tuesday, Thursday and Friday are WOD days.<br />Wednesday is an optional walk. Weekends are rest.
   </div>
 </div>
 
@@ -412,47 +421,186 @@ function intervalSegs(items,rounds){
   return s;
 }
 
-/* ---------- session ---------- */
+/* ---------- daily WOD generator ----------
+   Every training day: 5 min rebounder, then one WOD.
+   Format and moves are drawn fresh each day from a date seed,
+   so the same day always shows the same workout. */
+var LOWER=SQUAT.concat(HINGE);
+var MOVE_BY_ID={};SQUAT.concat(HINGE,PUSH,PULL).forEach(function(m){MOVE_BY_ID[m.id]=m;});
+var UPPER=PUSH.concat(PULL);
+var COND=[
+ {id:"row",name:"Row",kind:"cal",q:"concept2 rower form beginner"},
+ {id:"plank",name:"Plank",kind:"hold",q:"plank form beginner"},
+ {id:"sideplank",name:"Side plank",kind:"hold",unil:true,q:"side plank form beginner"},
+ {id:"hollow",name:"Hollow hold",kind:"hold",q:"hollow body hold form beginner"},
+ {id:"deadbug",name:"Dead bug",kind:"rep",unil:true,q:"dead bug exercise form"},
+ {id:"birddog",name:"Bird dog",kind:"rep",unil:true,q:"bird dog exercise form"},
+ {id:"mtnclimb",name:"Mountain climber",kind:"rep",q:"mountain climber form"},
+ {id:"situp",name:"Sit-up",kind:"rep",q:"sit up form"},
+ {id:"twist",name:"Russian twist, 15 lb",kind:"rep",q:"russian twist kettlebell form"},
+ {id:"swing25",name:"Kettlebell swing, 25 lb",kind:"rep",impact:true,q:"kettlebell swing form beginner"},
+ {id:"jack",name:"Jumping jack",kind:"rep",impact:true,q:"jumping jacks form"},
+ {id:"burpee",name:"Burpee, step back",kind:"rep",impact:true,q:"step back burpee beginner"}
+];
+var WARM5=[
+ {how:"Easy bounce for 2 minutes, then 30 seconds high knees, 30 seconds easy, twice through, then 1 minute easy.",timer:[["Easy bounce",120],["High knees",30],["Easy",30],["High knees",30],["Easy",30],["Easy bounce",60]]},
+ {how:"Easy bounce the whole 5 minutes. Add arm circles in minute 2 and a twist in minute 4.",timer:[["Easy bounce",60],["Arm circles",60],["Easy bounce",60],["Twist",60],["Easy bounce",60]]},
+ {how:"1 minute easy, 30 seconds faster. Three times through, then 30 seconds easy.",timer:[["Easy",60],["Faster",30],["Easy",60],["Faster",30],["Easy",60],["Faster",30],["Easy",30]]},
+ {how:"Easy bounce for 3 minutes, then 1 minute jacks on the trampoline, then 1 minute easy.",timer:[["Easy bounce",180],["Jacks",60],["Easy bounce",60]]}
+];
+function warmFor(date){return pickIdx(WARM5,dayIndex(date));}
+
+/* load steps up every 8 weeks, reps creep up every 4. Never her decision. */
+function wodLoad(mv,wk){
+  if(!mv.load||mv.load[0]===0)return null;
+  var l=mv.load[Math.min(Math.floor(wk/8),mv.load.length-1)];
+  if(mv.impact)l=Math.min(l,35);
+  return l;
+}
+function wodReps(mv,wk,scale){
+  var r=Math.round((mv.base+2+Math.min(Math.floor(wk/4),4))*(scale||1));
+  if(mv.unil)r=Math.max(4,Math.round(r/2));
+  return Math.max(3,r);
+}
+function plural(name){
+  var p=name.toLowerCase().split(",");var w=p[0];
+  w=/s$/.test(w)?w+"es":w+"s";p[0]=w;
+  return p.join(",").replace("romanian","Romanian");
+}
+/* Her weights. Whatever she sets on a move is remembered for that move.
+   After 3 logged workouts at the same weight, it steps up one notch on its own.
+   Ballistic moves never go past 35 lb. */
+var KB_STEPS=[15,25,35,50];
+var DB_STEPS=[3,5,10,15,25,35,45];
+function stepsFor(mv){
+  var st=/dumbbell/.test(mv.unit)?DB_STEPS:KB_STEPS;
+  if(mv.impact)st=st.filter(function(x){return x<=35;});
+  return st;
+}
+function wState(mv){try{var r=JSON.parse(read("w:"+mv.id)||"null");return r&&r.lb?r:null;}catch(e){return null;}}
+function weightFor(mv,wk){
+  if(!mv.load||mv.load[0]===0)return null;
+  var s=wState(mv);
+  return s?s.lb:wodLoad(mv,wk);
+}
+function setWeight(id,dir){
+  var mv=MOVE_BY_ID[id];if(!mv)return;
+  var st=stepsFor(mv),cur=weightFor(mv,weekIndex(today));
+  var i=st.indexOf(cur);if(i<0){i=0;for(var k=0;k<st.length;k++)if(st[k]<=cur)i=k;}
+  i=Math.max(0,Math.min(st.length-1,i+dir));
+  save("w:"+id,JSON.stringify({lb:st[i],n:0}));
+  render();
+}
+function liftText(mv,wk,scale){
+  return {text:wodReps(mv,wk,scale)+" "+plural(mv.name)+(mv.unil?" each side":""),q:mv.q,cue:mv.cue,mv:mv};
+}
+function condText(m,rng,scale){
+  scale=scale||1;var t;
+  if(m.kind==="hold")t=(m.unil?"20":"30")+" seconds "+m.name.toLowerCase()+(m.unil?" each side":"");
+  else if(m.kind==="cal")t=Math.round((8+Math.floor(rng()*5))*scale)+" cal row";
+  else{var r=Math.round([10,12,14][Math.floor(rng()*3)]*scale);
+    if(m.unil)r=Math.max(5,Math.round(r/2));
+    t=r+" "+plural(m.name)+(m.unil?" each side":"");}
+  return {text:t,q:m.q};
+}
+function plainName(m){
+  if(m.id==="row")return "Row, hard steady effort";
+  return m.name+(m.unil?", switch sides halfway":"");
+}
+function pickFrom(pool,rng,used){
+  var p=pool.filter(function(m){return !used[m.id];});
+  var m=p[Math.floor(rng()*p.length)];
+  used[m.id]=true;return m;
+}
+function minSegs(labels,mins){
+  var s=[];for(var i=0;i<mins;i++)s.push([labels[i%labels.length]+" · minute "+(i+1),60]);return s;
+}
+function ivSegs(labels,rounds,on,off){
+  var s=[];for(var r=0;r<rounds;r++)for(var i=0;i<labels.length;i++){s.push([labels[i],on]);s.push(["Rest",off]);}
+  s.pop();return s;
+}
+
+var FORMATS=[
+ function amrap(c){
+  var it=[c.liftT(c.lo),c.liftT(c.up),c.condT(c.co,1)];
+  if(c.x)it.splice(2,0,c.liftT(c.x));
+  return {tag:"AMRAP 12",mins:12,how:"As many rounds as you can in 12 minutes. Steady pace, no sprinting the first round. Write down your rounds.",items:it,timer:[["Go",720]]};
+ },
+ function emom(c){
+  var it=[c.liftT(c.lo,0.8),c.liftT(c.up,0.8),c.condT(c.co,0.8)];
+  return {tag:"EMOM 12",mins:12,how:"Every minute on the minute, cycle through the three. Rest whatever is left of each minute. Four times through.",
+   items:it.map(function(t,i){return {text:"Minute "+(i+1)+": "+t.text,q:t.q,cue:t.cue};}),timer:minSegs(["Minute 1","Minute 2","Minute 3"],12)};
+ },
+ function rft(c){
+  var it=[c.liftT(c.lo),c.liftT(c.up),c.condT(c.co,1)];
+  if(c.x)it.splice(2,0,c.liftT(c.x));
+  return {tag:"4 rounds for time",mins:13,how:"Four rounds, as fast as you can move well. 13 minute cap. Write down your time.",items:it,timer:[["Go",780]]};
+ },
+ function ladder(c){
+  var lo=c.lo,up=c.up;
+  return {tag:"Ladder, 12 min",mins:12,how:"Round 1 is 2 reps of each lift, round 2 is 4, then 6, then 8, climbing by 2 until the clock runs out. Do the third move every round. Write down your last full round.",
+   items:[{text:lo.name+(lo.unil?" (each side)":"")+": 2, 4, 6, 8...",q:lo.q,cue:lo.cue,mv:lo},
+          {text:up.name+(up.unil?" (each side)":"")+": 2, 4, 6, 8...",q:up.q,cue:up.cue,mv:up},
+          (function(t){t.text+=" every round";return t;})(c.condT(c.co,0.7))],timer:[["Go",720]]};
+ },
+ function intervals(c){
+  var ms=[c.lo,c.up,c.co];if(c.x)ms.splice(2,0,c.x);
+  var labels=ms.map(plainName);
+  var rounds=c.x?3:4;
+  return {tag:"40 on, 20 off",mins:rounds*ms.length,how:"Work 40 seconds, rest 20, move to the next. "+rounds+" times through. No counting, just move until it beeps.",
+   items:ms.map(function(m){return {text:plainName(m),q:m.q,cue:m.cue,mv:MOVE_BY_ID[m.id]===m?m:null};}),timer:ivSegs(labels,rounds,40,20)};
+ },
+ function chipper(c){
+  var a=c.liftT(c.lo,2),b=c.liftT(c.up,2),d=c.condT(c.co,2);
+  var it=[a,b,d];if(c.x)it.splice(2,0,c.liftT(c.x,2));
+  return {tag:"Chipper",mins:12,how:"One time through, top to bottom. Break the reps up however you want. 12 minute cap. Write down your time.",items:it,timer:[["Go",720]]};
+ },
+ function every2(c){
+  var it=[c.liftT(c.lo),c.liftT(c.up),c.condT(c.co,1)];
+  return {tag:"Every 2 min x 6",mins:12,how:"Start a round every 2 minutes. Rest whatever is left. Six rounds. If you stop finishing with 30 seconds to spare, go a little faster next time.",
+   items:it,timer:(function(){var s=[];for(var i=1;i<=6;i++)s.push(["Round "+i+" of 6",120]);return s;})()};
+ }
+];
+
 function sessionFor(date,noImpact,shortDay){
   var d=stripTime(date).getDay();
-  var wib=weekInBlock(date),blk=blockIndex(date);
-  if(d!==2&&d!==4)return null;
-  var a=anchorsFor(date,noImpact);
-  var A=(d===2)?a.squat:a.hinge;
-  var B=(d===2)?a.push:a.pull;
-  var rounds=shortDay?3:5;
-  var s={
-    dayKey:(d===2?"tue":"thu"),
-    focus:(d===2?"Squat and press":"Hinge and pull"),
-    rounds:rounds,
-    warm:warmupFor(date),
-    A:{mv:A,rep:repText(A,wib,blk),load:loadText(A,blk,wib)},
-    B:{mv:B,rep:repText(B,wib,blk),load:loadText(B,blk,wib)},
-    impact:!!(A.impact||B.impact)
-  };
-  s.strengthTimer=strengthSegs(s);
-  s.fin=shortDay?null:finisherFor(date,s.dayKey,noImpact);
-  s.mins=3+(shortDay?6:10)+(shortDay?0:6);
-  return s;
-}
-function strengthSegs(s){
-  var segs=[];
-  for(var i=1;i<=s.rounds;i++){
-    segs.push([s.A.mv.name+" \u00b7 round "+i+" of "+s.rounds,35]);
-    segs.push(["Rest",25]);
-    segs.push([s.B.mv.name+" \u00b7 round "+i+" of "+s.rounds,35]);
-    if(i<s.rounds)segs.push(["Rest",25]);
+  if(d!==1&&d!==2&&d!==4&&d!==5)return null;
+  var wk=weekIndex(date),wib=weekInBlock(date),blk=blockIndex(date);
+  var rng=mulberry32(dayIndex(date)*7919+13);
+  var ok=function(m){return !(m.impact&&(noImpact||wk<2));};
+  var used={};
+  var lo=pickFrom(LOWER.filter(ok),rng,used);
+  var up=pickFrom(UPPER.filter(ok),rng,used);
+  var co=pickFrom(COND.filter(ok),rng,used);
+  var x=null;
+  if(rng()<0.5){x=pickFrom((rng()<0.5?LOWER:UPPER).filter(ok),rng,used);}
+  var c={wk:wk,lo:lo,up:up,co:co,x:x,
+    liftT:function(m,sc){return liftText(m,wk,sc);},
+    condT:function(m,sc){return condText(m,rng,sc);}};
+  var fmt=FORMATS[Math.floor(rng()*FORMATS.length)](c);
+  var moves=[lo,up,co];if(x)moves.push(x);
+  var s={warm:warmFor(date),moves:moves,impact:moves.some(function(m){return m.impact;})};
+
+  if(shortDay){
+    s.wod={tag:"AMRAP 6",mins:6,how:"Short day. As many rounds as you can in 6 minutes. This still counts.",
+      items:[liftText(lo,wk),liftText(up,wk),condText(co,rng,1)],timer:[["Go",360]]};
+    s.warmMins=2;s.warmTimer=[["Easy bounce",120]];s.warmHow="2 minutes easy bounce.";
+  } else if(d===4&&wib===3){
+    var b=BENCH[blk%BENCH.length];
+    s.wod={benchmark:true,name:b.name,tag:b.type==="emom"?"EMOM "+b.mins:"AMRAP "+b.mins,mins:b.mins,how:b.how,
+      items:b.items.map(function(i){return {text:i.t,q:i.q};}),
+      timer:b.type==="emom"?emomSegs(b.mins):[["Go",b.mins*60]]};
+    var cash=[c.liftT(up,0.8),c.condT(co,0.8)];
+    s.cash={tag:"Then 6 min cash-out",how:"After you write your score, rest 1 minute, then as many rounds as you can in 6 minutes.",items:cash,
+      timer:[["Rest",60],["Go",360]]};
+    s.cashMoves=[up,co];
+    s.warmMins=5;
+  } else {
+    s.wod=fmt;s.warmMins=5;
   }
-  return segs;
-}
-function warmupFor(date){
-  var w=weekIndex(date)%3;
-  var opts=[
-    "2 minutes easy row or bounce, then 10 bodyweight squats and 10 hip hinges.",
-    "2 minutes on the mini trampoline, then 10 glute bridges and 10 arm circles each way.",
-    "2 minutes easy row, then 10 bodyweight squats, 8 push-ups on the bench, 10 arm circles."
-  ];
-  return opts[w];
+  if(!s.warmTimer){s.warmTimer=s.warm.timer;s.warmHow=s.warm.how;}
+  s.mins=s.warmMins+s.wod.mins+(s.cash?7:0);
+  return s;
 }
 
 /* ---------- optional day ---------- */
@@ -480,7 +628,17 @@ var noImpact=false,shortDay=false;
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function watchLink(q){return '<a class="ex-watch" target="_blank" rel="noopener" href="'+esc(yt(q))+'">Watch</a>';}
 
-function exBlock(id,tag,name,rep,note,q){
+function chip(mv){
+  var lb=weightFor(mv,weekIndex(today));
+  if(lb===null)return "";
+  var st=stepsFor(mv),s=wState(mv);
+  var left=(s&&s.n)?(3-s.n):3;
+  return '<div class="wchip"><button aria-label="Lighter" onclick="setWeight(\''+mv.id+'\',-1)">&minus;</button>'
+    +'<span>'+lb+' lb</span>'
+    +'<button aria-label="Heavier" onclick="setWeight(\''+mv.id+'\',1)">+</button>'
+    +(lb<st[st.length-1]?'<em>goes up after '+left+' more</em>':'')+'</div>';
+}
+function exBlock(id,tag,name,rep,note,q,mv){
   return '<div class="ex" id="'+id+'">'
     +'<button class="check" aria-label="Mark done" onclick="toggleDone(\''+id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="#0E1420" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></button>'
     +'<div class="ex-body">'
@@ -488,6 +646,7 @@ function exBlock(id,tag,name,rep,note,q){
     +'<div class="ex-name">'+esc(name)+'</div>'
     +(rep?'<div class="ex-rep">'+esc(rep)+'</div>':'')
     +(note?'<div class="ex-note">'+esc(note)+'</div>':'')
+    +(mv?chip(mv):'')
     +(q?watchLink(q):'')
     +'</div></div>';
 }
@@ -498,14 +657,14 @@ function render(){
   document.getElementById("dateline").textContent=DAYNAME[d]+", "+MONTH[stripTime(today).getMonth()]+" "+stripTime(today).getDate();
 
   var main=document.getElementById("main");
-  var isTraining=(d===2||d===4);
+  var isTraining=(d===1||d===2||d===4||d===5);
   document.getElementById("toggles").style.display=isTraining?"flex":"none";
 
   if(d===0||d===6){
     document.getElementById("eyebrow").textContent="Rest";
     document.getElementById("subline").textContent="Block "+blk+" \u00b7 Week "+wib+" of 4";
-    main.innerHTML='<div class="rest"><h2>Nothing today</h2><p>Weekend. Move if you feel like it, skip it if you don\'t.</p></div>';
-    updateProgress();renderWeek();return;
+    main.innerHTML='<div class="rest"><h2>Nothing today</h2><p>Weekend. Rest.</p></div>';
+    updateProgress();renderWeek();renderLog();return;
   }
 
   if(!isTraining){
@@ -531,53 +690,52 @@ function render(){
     }
     html+='</div>';
     main.innerHTML=html;
-    updateProgress();renderWeek();return;
+    updateProgress();renderWeek();renderLog();return;
   }
 
   var s=sessionFor(today,noImpact,shortDay);
-  document.getElementById("eyebrow").textContent=s.focus;
-  document.getElementById("subline").textContent="Block "+blk+" \u00b7 Week "+wib+" of 4 \u00b7 about "+s.mins+" minutes";
+  var w=s.wod;
+  document.getElementById("eyebrow").textContent=w.benchmark?"Benchmark":w.tag;
+  document.getElementById("subline").textContent="About "+s.mins+" minutes \u00b7 already picked, just start";
 
   var html="";
-  html+='<div class="blockhead"><span class="blocktag warm">Warm up</span>'
-      +'<div class="blockmeta">3 minutes</div>'
-      +'<div class="blockhow">'+esc(s.warm)+'</div>'
-      +'<button class="btn ghost" style="margin-top:12px;" onclick="startTimer(0,\'warm\')">Start 3 min</button></div>';
+  html+='<div class="blockhead"><span class="blocktag warm">Rebounder</span>'
+      +'<div class="blockmeta">'+s.warmMins+' minutes</div>'
+      +'<div class="blockhow">'+esc(s.warmHow)+'</div>'
+      +'<button class="btn ghost" style="margin-top:12px;" onclick="startTimer(0,\'warm\')">Start '+s.warmMins+' min</button></div>';
 
-  html+='<div class="blockhead" style="margin-top:14px;"><span class="blocktag">Strength</span>'
-      +'<div class="blockmeta">'+(shortDay?"About 6 minutes":"About 10 minutes")+' \u00b7 '+s.rounds+' rounds</div>'
-      +'<div class="blockhow">Alternate the two lifts. Rest about 30 seconds between them. This is the part that builds you, so the last two rounds should be hard.</div></div>';
-
-  html+=exBlock("exA","Lift A",s.A.mv.name,s.A.rep+" \u00b7 "+s.A.load,s.A.mv.cue,s.A.mv.q);
-  html+=exBlock("exB","Lift B",s.B.mv.name,s.B.rep+" \u00b7 "+s.B.load,s.B.mv.cue,s.B.mv.q);
-  if(s.impact)html+='<div class="flag">Ballistic work today. Stop the set if you feel heaviness or pressure. Swings stay at 35 lb, always.</div>';
-  html+='<button class="btn" onclick="startTimer(0,\'strength\')">Start strength timer</button>';
-
-  if(s.fin){
-    var f=s.fin;
-    html+='<div class="blockhead"><span class="blocktag fin">Finisher</span>'
-      +(f.benchmark?'<div class="benchname">'+esc(f.name)+'</div>':'')
-      +'<div class="blockmeta">'+esc(f.tag)+'</div>'
-      +'<div class="blockhow">'+esc(f.how)+'</div></div>';
-    for(var j=0;j<f.items.length;j++){
-      html+=exBlock("fin"+j,null,f.items[j].text,null,null,f.items[j].q);
-    }
-    if(f.benchmark){
-      var bIdx=blockIndex(today);
-      var prev=scorePrev(f.name,bIdx);
-      html+='<div class="score"><label for="scoreIn">Your score today</label>'
-        +'<input id="scoreIn" type="text" placeholder="Rounds, reps, or time" value="'+esc(scoreCurrent(f.name,bIdx))+'" oninput="saveScore(\''+esc(f.name)+'\','+bIdx+',this.value)" />'
-        +(prev?'<div class="prev">Last time you did '+esc(f.name)+': '+esc(prev)+'</div>':'<div class="prev">First time through. Whatever you write down becomes the number to beat.</div>')
-        +'</div>';
-    }
-    html+='<button class="btn" onclick="startTimer(0,\'fin\')">Start finisher timer</button>';
-  } else {
-    html+='<div class="rest" style="margin-top:4px;"><h2>Short day</h2><p>No finisher. Three rounds and you are done. This still counts.</p></div>';
+  html+='<div class="blockhead" style="margin-top:14px;"><span class="blocktag fin">WOD</span>'
+      +(w.benchmark?'<div class="benchname">'+esc(w.name)+'</div>':'')
+      +'<div class="blockmeta">'+esc(w.tag)+' \u00b7 '+w.mins+' minutes</div>'
+      +'<div class="blockhow">'+esc(w.how)+'</div></div>';
+  for(var j=0;j<w.items.length;j++)html+=exBlock("wod"+j,null,w.items[j].text,null,w.items[j].cue||null,w.items[j].q,w.items[j].mv);
+  if(s.impact&&!w.benchmark)html+='<div class="flag">Ballistic work today. Stop if you feel heaviness or pressure, or flip on No-impact.</div>';
+  if(w.benchmark){
+    var bIdx=blockIndex(today);
+    var prev=scorePrev(w.name,bIdx);
+    html+='<div class="score"><label for="scoreIn">Your score today</label>'
+      +'<input id="scoreIn" type="text" placeholder="Rounds, reps, or time" value="'+esc(scoreCurrent(w.name,bIdx))+'" oninput="saveScore(\''+esc(w.name)+'\','+bIdx+',this.value)" />'
+      +(prev?'<div class="prev">Last time you did '+esc(w.name)+': '+esc(prev)+'</div>':'<div class="prev">First time through. Whatever you write down becomes the number to beat.</div>')
+      +'</div>';
+  }
+  html+='<button class="btn" onclick="startTimer(0,\'wod\')">Start WOD timer</button>';
+  var logged=todayLog();
+  html+='<div class="score logbox"><label for="logIn">'+(w.benchmark?'Log it':'Rounds or time today')+'</label>'
+    +(w.benchmark?'':'<input id="logIn" type="text" placeholder="e.g. 5 rounds + 8, or 11:42" value="'+esc(logged?logged.score:"")+'" />')
+    +'<button class="btn" style="margin-top:10px;" onclick="logToday()">'+(logged?'Logged \u2713 tap to update':'Done, log it')+'</button>'
+    +'<div class="prev">Logging saves the weights above. Three logs at the same weight and that move goes up a notch on its own.</div></div>';
+  if(s.cash){
+    html+='<div class="blockhead"><span class="blocktag">Cash-out</span>'
+      +'<div class="blockmeta">'+esc(s.cash.tag)+'</div>'
+      +'<div class="blockhow">'+esc(s.cash.how)+'</div></div>';
+    for(var k=0;k<s.cash.items.length;k++)html+=exBlock("cash"+k,null,s.cash.items[k].text,null,null,s.cash.items[k].q,s.cash.items[k].mv);
+    html+='<button class="btn" onclick="startTimer(0,\'cash\')">Start cash-out timer</button>';
   }
 
   main.innerHTML=html;
   updateProgress();
   renderWeek();
+  renderLog();
 }
 
 function scoreHist(name){
@@ -609,6 +767,43 @@ function saveScore(name,blk,val){
   save("score:"+name,JSON.stringify(h));
 }
 
+function dkey(d){d=stripTime(d);return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
+function friLogged(sat){var f=new Date(sat.getFullYear(),sat.getMonth(),sat.getDate()-1),k=dkey(f),a=logAll();for(var i=0;i<a.length;i++)if(a[i].d===k)return true;return false;}
+function logAll(){try{var a=JSON.parse(read("log")||"[]");return Array.isArray(a)?a:[];}catch(e){return [];}}
+function todayLog(){var k=dkey(today),a=logAll();for(var i=0;i<a.length;i++)if(a[i].d===k)return a[i];return null;}
+function logToday(){
+  var s=sessionFor(today,noImpact,shortDay);if(!s)return;
+  var k=dkey(today),wk=weekIndex(today);
+  var inp=document.getElementById("logIn");
+  var score=inp?inp.value:(document.getElementById("scoreIn")?document.getElementById("scoreIn").value:"");
+  var items=s.wod.items.concat(s.cash?s.cash.items:[]);
+  var seen={},wts=[];
+  items.forEach(function(it){
+    var mv=it.mv;if(!mv||seen[mv.id])return;seen[mv.id]=1;
+    var lb=weightFor(mv,wk);if(lb===null)return;
+    wts.push(mv.name+" "+lb+" lb");
+    var st=wState(mv)||{lb:lb,n:0};
+    if(st.last===k){save("w:"+mv.id,JSON.stringify(st));return;}
+    st.last=k;st.n=(st.lb===lb?(st.n||0):0)+1;st.lb=lb;
+    var steps=stepsFor(mv),i=steps.indexOf(lb);
+    if(st.n>=3&&i>=0&&i<steps.length-1){st.lb=steps[i+1];st.n=0;st.bumped=k;}
+    save("w:"+mv.id,JSON.stringify(st));
+  });
+  var a=logAll().filter(function(e){return e.d!==k;});
+  a.push({d:k,tag:s.wod.benchmark?s.wod.name:s.wod.tag,score:score,w:wts});
+  save("log",JSON.stringify(a.slice(-60)));
+  render();
+}
+function renderLog(){
+  var a=logAll().slice(-8).reverse(),el=document.getElementById("logList");
+  if(!el)return;
+  if(!a.length){el.innerHTML='<div class="logrow"><span class="r">Nothing logged yet. Hit "Done, log it" after your next WOD.</span></div>';return;}
+  el.innerHTML=a.map(function(e){
+    var p=e.d.split("-");
+    return '<div class="logrow"><b>'+MONTH[+p[1]-1]+' '+p[2]+'</b> '+esc(e.tag)+(e.score?' \u00b7 '+esc(e.score):'')
+      +(e.w&&e.w.length?'<br><span class="r">'+esc(e.w.join(", "))+'</span>':'')+'</div>';
+  }).join("");
+}
 function toggleDone(id){
   var el=document.getElementById(id);
   if(!el)return;
@@ -627,17 +822,12 @@ function updateProgress(){
 
 function weekDetail(dt){
   var dow=stripTime(dt).getDay();
-  if(dow===2||dow===4){
+  if(dow===1||dow===2||dow===4||dow===5){
     var s=sessionFor(dt,noImpact,false);
-    var h='<h4>Warm up</h4><p>'+esc(s.warm)+'</p>';
-    h+='<h4>Strength \u00b7 '+s.rounds+' rounds</h4>';
-    h+='<p class="l"><b>'+esc(s.A.mv.name)+'</b><br><span class="r">'+esc(s.A.rep+" \u00b7 "+s.A.load)+'</span></p>';
-    h+='<p class="l" style="margin-top:7px;"><b>'+esc(s.B.mv.name)+'</b><br><span class="r">'+esc(s.B.rep+" \u00b7 "+s.B.load)+'</span></p>';
-    if(s.fin){
-      h+='<h4>Finisher \u00b7 '+esc(s.fin.tag)+'</h4>';
-      if(s.fin.benchmark)h+='<p class="l" style="color:var(--coral);">'+esc(s.fin.name)+'</p>';
-      for(var i=0;i<s.fin.items.length;i++)h+='<p class="q">'+esc(s.fin.items[i].text)+'</p>';
-    }
+    var h='<h4>Rebounder \u00b7 5 min</h4><p>'+esc(s.warmHow)+'</p>';
+    h+='<h4>'+(s.wod.benchmark?esc(s.wod.name)+' \u00b7 ':'')+esc(s.wod.tag)+'</h4>';
+    for(var i=0;i<s.wod.items.length;i++)h+='<p class="q">'+esc(s.wod.items[i].text)+'</p>';
+    if(s.cash){h+='<h4>'+esc(s.cash.tag)+'</h4>';for(var k=0;k<s.cash.items.length;k++)h+='<p class="q">'+esc(s.cash.items[k].text)+'</p>';}
     return h;
   }
   var o=optionsFor(dt);
@@ -660,10 +850,9 @@ function renderWeek(){
     var dt=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i);
     var isNow=(stripTime(dt).getTime()===stripTime(today).getTime());
     var txt;
-    if(i===1||i===3){
+    if(i!==2){
       var s=sessionFor(dt,noImpact,false);
-      txt=s.A.mv.name+" and "+s.B.mv.name.toLowerCase();
-      if(s.fin&&s.fin.benchmark)txt+=" \u00b7 "+s.fin.name;
+      txt=s.wod.benchmark?s.wod.name+" \u00b7 benchmark":s.wod.tag+" \u00b7 "+s.moves.map(function(m){return m.name.split(",")[0].toLowerCase();}).join(", ");
     } else {
       txt='<em>Optional \u00b7 '+optionsFor(dt)[0].tool.toLowerCase()+', '+optionsFor(dt)[0].time+'</em>';
     }
@@ -739,15 +928,12 @@ function startTimer(idx,kind){
   if(kind==="opt"){
     var o=optionsFor(today)[idx];
     segs=o.timer.slice();title=o.tool;
-  } else if(kind==="warm"){
-    segs=[["Warm up",180]];title="Warm up";
-  } else if(kind==="strength"){
+  } else {
     var s=sessionFor(today,noImpact,shortDay);
-    segs=s.strengthTimer.slice();title="Strength";
-  } else if(kind==="fin"){
-    var s2=sessionFor(today,noImpact,shortDay);
-    if(!s2.fin)return;
-    segs=s2.fin.timer.slice();title=s2.fin.benchmark?s2.fin.name:"Finisher";
+    if(kind==="warm"){segs=s.warmTimer.slice();title="Rebounder";}
+    else if(kind==="wod"){segs=s.wod.timer.slice();title=s.wod.benchmark?s.wod.name:s.wod.tag;}
+    else if(kind==="cash"&&s.cash){segs=s.cash.timer.slice();title="Cash-out";}
+    else return;
   }
   T.segs=segs;T.i=0;T.left=segs[0][1];T.running=false;T.lastBeep=-1;
   document.getElementById("tTitle").textContent=title;
