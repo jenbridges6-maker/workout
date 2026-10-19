@@ -291,11 +291,11 @@ var FIN=[
 
 /* ---------- named benchmarks, fixed loads, repeat every block ---------- */
 var BENCH=[
- {name:"The Sourdough",type:"amrap",mins:6,how:"As many rounds as you can in 6 minutes. Write down your rounds.",
+ {name:"The Sourdough",type:"amrap",ids:["kbdl","pushup"],mins:6,how:"As many rounds as you can in 6 minutes. Write down your rounds.",
   items:[{t:"10 kettlebell deadlifts, 50 lb",q:"kettlebell deadlift form beginner"},{t:"8 push-ups",q:"push up form beginner progression"},{t:"10 cal row",q:"concept2 rower form beginner"}]},
- {name:"Dawn Patrol",type:"amrap",mins:7,how:"As many rounds as you can in 7 minutes. Write down your rounds.",
+ {name:"Dawn Patrol",type:"amrap",ids:["goblet","stepup"],mins:7,how:"As many rounds as you can in 7 minutes. Write down your rounds.",
   items:[{t:"200 m row",q:"concept2 rower form beginner"},{t:"10 goblet squats, 35 lb",q:"goblet squat kettlebell form"},{t:"10 bench step-ups, 5 each side",q:"bench step up bodyweight"}]},
- {name:"Fort Morgan",type:"emom",mins:6,how:"Every minute on the minute for 6 minutes. Rest whatever is left of each minute. Write down the last minute you finished clean.",
+ {name:"Fort Morgan",type:"emom",ids:["bentrow"],mins:6,how:"Every minute on the minute for 6 minutes. Rest whatever is left of each minute. Write down the last minute you finished clean.",
   items:[{t:"Odd minutes: 12 cal row",q:"concept2 rower form beginner"},{t:"Even minutes: 10 bent-over rows, 25 lb",q:"dumbbell bent over row form"}]}
 ];
 
@@ -425,6 +425,8 @@ function intervalSegs(items,rounds){
    Every training day: 5 min rebounder, then one WOD.
    Format and moves are drawn fresh each day from a date seed,
    so the same day always shows the same workout. */
+SQUAT.forEach(function(m){m.pat="squat";});HINGE.forEach(function(m){m.pat="hinge";});
+PUSH.forEach(function(m){m.pat="push";});PULL.forEach(function(m){m.pat="pull";});
 var LOWER=SQUAT.concat(HINGE);
 var MOVE_BY_ID={};SQUAT.concat(HINGE,PUSH,PULL).forEach(function(m){MOVE_BY_ID[m.id]=m;});
 var UPPER=PUSH.concat(PULL);
@@ -438,7 +440,7 @@ var COND=[
  {id:"mtnclimb",name:"Mountain climber",kind:"rep",q:"mountain climber form"},
  {id:"situp",name:"Sit-up",kind:"rep",q:"sit up form"},
  {id:"twist",name:"Russian twist, 15 lb",kind:"rep",q:"russian twist kettlebell form"},
- {id:"swing25",name:"Kettlebell swing, 25 lb",kind:"rep",impact:true,q:"kettlebell swing form beginner"},
+ {id:"swing25",name:"Kettlebell swing, 25 lb",kind:"rep",impact:true,pat:"hinge",q:"kettlebell swing form beginner"},
  {id:"jack",name:"Jumping jack",kind:"rep",impact:true,q:"jumping jacks form"},
  {id:"burpee",name:"Burpee, step back",kind:"rep",impact:true,q:"step back burpee beginner"}
 ];
@@ -562,6 +564,48 @@ var FORMATS=[
  }
 ];
 
+/* ---------- spacing rules (from Tue Oct 20 2026 on) ----------
+   Days up to and including SPACING_FROM-1 keep their original workouts.
+   After that, each day looks back at the last few training days:
+   - no format repeats within the last 2 training days
+   - no lift repeats within the last 3 training days (about a week)
+   - on back-to-back days (Mon/Tue, Thu/Fri) the movement patterns
+     alternate: squat after hinge, pull after push, and so on,
+     so the same muscles are never loaded two mornings in a row. */
+var SPACING_FROM=dayIndex(new Date(2026,9,20));
+var FMT_BACK=2,LIFT_BACK=3;
+function isTrainDay(dt){var d=stripTime(dt).getDay();return d===1||d===2||d===4||d===5;}
+var PLAN_CACHE={};
+function planFor(dt){
+  var k=dayIndex(dt);
+  if(!(k in PLAN_CACHE)){var s=sessionFor(dt,false,false);PLAN_CACHE[k]=s?s.plan:null;}
+  return PLAN_CACHE[k];
+}
+function historyFor(date){
+  var out=[],dt=stripTime(date);
+  for(var i=1;i<=14&&out.length<LIFT_BACK;i++){
+    var p=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()-i);
+    if(p<START)break;
+    if(!isTrainDay(p))continue;
+    var pl=planFor(p);
+    if(pl)out.push({gap:i,plan:pl});
+  }
+  return out;
+}
+function pickSpaced(pool,rng,used,recent,banPat){
+  var tries=[
+    function(m){return !used[m.id]&&!recent[m.id]&&!(m.pat&&banPat[m.pat]);},
+    function(m){return !used[m.id]&&!(m.pat&&banPat[m.pat]);},
+    function(m){return !used[m.id];}
+  ];
+  for(var t=0;t<tries.length;t++){
+    var p=pool.filter(tries[t]);
+    if(p.length){var m=p[Math.floor(rng()*p.length)];used[m.id]=true;return m;}
+  }
+  return null;
+}
+var FMT_USES_X={0:true,2:true,4:true,5:true};
+
 function sessionFor(date,noImpact,shortDay){
   var d=stripTime(date).getDay();
   if(d!==1&&d!==2&&d!==4&&d!==5)return null;
@@ -569,15 +613,48 @@ function sessionFor(date,noImpact,shortDay){
   var rng=mulberry32(dayIndex(date)*7919+13);
   var ok=function(m){return !(m.impact&&(noImpact||wk<2));};
   var used={};
-  var lo=pickFrom(LOWER.filter(ok),rng,used);
-  var up=pickFrom(UPPER.filter(ok),rng,used);
-  var co=pickFrom(COND.filter(ok),rng,used);
-  var x=null;
-  if(rng()<0.5){x=pickFrom((rng()<0.5?LOWER:UPPER).filter(ok),rng,used);}
+  var lo,up,co,x=null,fi;
+  var isBench=(d===4&&wib===3);
+
+  if(dayIndex(date)<SPACING_FROM){
+    /* original generator, unchanged, so past days stay as they were */
+    lo=pickFrom(LOWER.filter(ok),rng,used);
+    up=pickFrom(UPPER.filter(ok),rng,used);
+    co=pickFrom(COND.filter(ok),rng,used);
+    if(rng()<0.5){x=pickFrom((rng()<0.5?LOWER:UPPER).filter(ok),rng,used);}
+    fi=Math.floor(rng()*FORMATS.length);
+  } else {
+    var hist=historyFor(date),recentF={},recentL={},ban={};
+    hist.forEach(function(h,i){
+      if(i<FMT_BACK)recentF[h.plan.fmt]=true;
+      h.plan.lifts.forEach(function(id){recentL[id]=true;});
+      if(h.gap===1)h.plan.pats.forEach(function(p){ban[p]=true;});
+    });
+    /* benchmark Thursdays are fixed, so the days before them steer clear */
+    if(wib===3&&(d===1||d===2)){var nb=BENCH[blk%BENCH.length];
+      recentF[nb.type==="emom"?1:0]=true;nb.ids.forEach(function(id){recentL[id]=true;});}
+    var allowed=[];for(var f=0;f<FORMATS.length;f++)if(!recentF[f])allowed.push(f);
+    if(!allowed.length)allowed=[0,1,2,3,4,5,6];
+    fi=allowed[Math.floor(rng()*allowed.length)];
+    /* each day trains one lower pattern and one upper pattern, so the
+       next morning always has the opposite pair fully rested */
+    var bench=isBench?BENCH[blk%BENCH.length]:null,bLo=null,bUp=null;
+    if(bench)bench.ids.forEach(function(id){var m=MOVE_BY_ID[id];used[id]=true;
+      if(m.pat==="squat"||m.pat==="hinge")bLo=m.pat;else bUp=m.pat;});
+    lo=pickSpaced(LOWER.filter(ok),rng,used,recentL,ban);
+    up=pickSpaced(UPPER.filter(ok).filter(function(m){return !bUp||m.pat===bUp;}),rng,used,recentL,ban);
+    var loPat=bench?bLo:lo.pat;
+    co=pickSpaced(COND.filter(ok).filter(function(m){return !m.pat||!loPat||m.pat===loPat;}),rng,used,recentL,ban);
+    if(!bench&&FMT_USES_X[fi]&&rng()<0.5){
+      var same=rng()<0.5?lo:up;
+      var xp=(same===lo?LOWER:UPPER).filter(ok).filter(function(m){return !used[m.id]&&!recentL[m.id]&&m.pat===same.pat;});
+      if(xp.length){x=xp[Math.floor(rng()*xp.length)];used[x.id]=true;}
+    }
+  }
   var c={wk:wk,lo:lo,up:up,co:co,x:x,
     liftT:function(m,sc){return liftText(m,wk,sc);},
     condT:function(m,sc){return condText(m,rng,sc);}};
-  var fmt=FORMATS[Math.floor(rng()*FORMATS.length)](c);
+  var fmt=FORMATS[fi](c);
   var moves=[lo,up,co];if(x)moves.push(x);
   var s={warm:warmFor(date),moves:moves,impact:moves.some(function(m){return m.impact;})};
 
@@ -585,7 +662,7 @@ function sessionFor(date,noImpact,shortDay){
     s.wod={tag:"AMRAP 6",mins:6,how:"Short day. As many rounds as you can in 6 minutes. This still counts.",
       items:[liftText(lo,wk),liftText(up,wk),condText(co,rng,1)],timer:[["Go",360]]};
     s.warmMins=2;s.warmTimer=[["Easy bounce",120]];s.warmHow="2 minutes easy bounce.";
-  } else if(d===4&&wib===3){
+  } else if(isBench){
     var b=BENCH[blk%BENCH.length];
     s.wod={benchmark:true,name:b.name,tag:b.type==="emom"?"EMOM "+b.mins:"AMRAP "+b.mins,mins:b.mins,how:b.how,
       items:b.items.map(function(i){return {text:i.t,q:i.q};}),
@@ -600,6 +677,19 @@ function sessionFor(date,noImpact,shortDay){
   }
   if(!s.warmTimer){s.warmTimer=s.warm.timer;s.warmHow=s.warm.how;}
   s.mins=s.warmMins+s.wod.mins+(s.cash?7:0);
+
+  /* what was actually trained, for the next days' spacing */
+  var done;
+  if(isBench){
+    var bb=BENCH[blk%BENCH.length];
+    done=bb.ids.map(function(id){return MOVE_BY_ID[id];}).filter(Boolean).concat([up,co]);
+    s.plan={fmt:bb.type==="emom"?1:0};
+  } else {
+    done=FMT_USES_X[fi]?moves:[lo,up,co];
+    s.plan={fmt:fi};
+  }
+  s.plan.lifts=done.map(function(m){return m.id;});
+  s.plan.pats=done.filter(function(m){return m.pat;}).map(function(m){return m.pat;});
   return s;
 }
 
