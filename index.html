@@ -531,7 +531,7 @@ var FORMATS=[
  function emom(c){
   var it=[c.liftT(c.lo,0.8),c.liftT(c.up,0.8),c.condT(c.co,0.8)];
   return {tag:"EMOM 12",mins:12,how:"Every minute on the minute, cycle through the three. Rest whatever is left of each minute. Four times through.",
-   items:it.map(function(t,i){return {text:"Minute "+(i+1)+": "+t.text,q:t.q,cue:t.cue};}),timer:minSegs(["Minute 1","Minute 2","Minute 3"],12)};
+   items:it.map(function(t,i){return {text:"Minute "+(i+1)+": "+t.text,q:t.q,cue:t.cue,mv:t.mv};}),timer:minSegs(["Minute 1","Minute 2","Minute 3"],12)};
  },
  function rft(c){
   var it=[c.liftT(c.lo),c.liftT(c.up),c.condT(c.co,1)];
